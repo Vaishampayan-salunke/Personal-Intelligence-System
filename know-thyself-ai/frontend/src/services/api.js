@@ -1,6 +1,13 @@
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
+// Ensure base URL properly routes to the backend's /api prefix
+let rawBase = (import.meta.env.VITE_API_BASE_URL || '').trim().replace(/\/+$/, '');
+if (rawBase && !rawBase.endsWith('/api')) {
+  rawBase = `${rawBase}/api`;
+}
+const API_BASE_URL = rawBase || '/api';
+
+console.log('[Know Thyself AI] API Base URL configured as:', API_BASE_URL);
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -23,6 +30,13 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    if (error.response && error.response.status === 405) {
+      if (!error.response.data || typeof error.response.data !== 'object') {
+        error.response.data = {};
+      }
+      error.response.data.detail = 'Backend URL is missing in Vercel. In Vercel Project Settings -> Environment Variables, add VITE_API_BASE_URL pointing to your Render backend URL, then Redeploy.';
+    }
+
     if (error.response && error.response.status === 401) {
       const isAuthEndpoint = error.config.url?.includes('/auth/login') || error.config.url?.includes('/auth/register');
       if (!isAuthEndpoint) {
