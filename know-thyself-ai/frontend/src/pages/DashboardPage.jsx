@@ -40,6 +40,7 @@ import {
 import { dashboardService, nudgesService, recordsService } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import { useLiveMetrics } from '../hooks/useLiveMetrics';
 import ConnectPhoneModal from '../components/ConnectPhoneModal';
 
 export default function DashboardPage() {
@@ -55,6 +56,40 @@ export default function DashboardPage() {
   const [syncingSteps, setSyncingSteps] = useState(false);
   const [pedometerActive, setPedometerActive] = useState(false);
   const [connectModalOpen, setConnectModalOpen] = useState(false);
+
+  // Real-time WebSocket connection to receive phone telemetry live
+  const handleLiveMetricsUpdate = (telemetry) => {
+    setDashboardData((prev) => {
+      if (!prev) return prev;
+      const m = telemetry.current_metrics || {};
+      const updatedMetrics = { ...(prev.metrics || {}) };
+
+      if (m.steps !== undefined && m.steps !== null) {
+        if (updatedMetrics.steps) updatedMetrics.steps.current_value = m.steps;
+      }
+      if (m.screen_time !== undefined && m.screen_time !== null) {
+        if (updatedMetrics.screen_time) updatedMetrics.screen_time.current_value = m.screen_time;
+      }
+      if (m.sleep_hours !== undefined && m.sleep_hours !== null && m.sleep_hours > 0) {
+        if (updatedMetrics.sleep) updatedMetrics.sleep.current_value = m.sleep_hours;
+      }
+      if (m.exercise_minutes !== undefined && m.exercise_minutes !== null && m.exercise_minutes > 0) {
+        if (updatedMetrics.exercise) updatedMetrics.exercise.current_value = m.exercise_minutes;
+      }
+      if (m.water_intake !== undefined && m.water_intake !== null && m.water_intake > 0) {
+        if (updatedMetrics.water) updatedMetrics.water.current_value = m.water_intake;
+      }
+
+      return {
+        ...prev,
+        intelligence_score: telemetry.intelligence_score ?? prev.intelligence_score,
+        metrics: updatedMetrics
+      };
+    });
+    info(`Live sync received from Android companion phone!`);
+  };
+
+  const { isWsConnected, deviceStatus, refreshDeviceStatus } = useLiveMetrics(handleLiveMetricsUpdate);
 
   // Active device screen-time background sync
   useEffect(() => {
@@ -219,11 +254,20 @@ export default function DashboardPage() {
             {/* Connect Phone Button */}
             <button
               onClick={() => setConnectModalOpen(true)}
-              className="px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-500 to-indigo-600 hover:from-emerald-600 hover:to-indigo-700 text-white text-xs font-bold transition-all flex items-center gap-2 shadow-md shadow-teal-500/25"
+              className={`px-3.5 py-2.5 rounded-xl text-white text-xs font-bold transition-all flex items-center gap-2 shadow-xs ${
+                deviceStatus?.is_connected
+                  ? 'bg-emerald-500/25 hover:bg-emerald-500/35 border border-emerald-400/40 text-emerald-100'
+                  : 'bg-gradient-to-r from-emerald-500 via-teal-500 to-indigo-600 hover:from-emerald-600 hover:to-indigo-700 shadow-md shadow-teal-500/25'
+              }`}
               title="Connect Android phone to sync real-time steps & screen time"
             >
-              <Smartphone className="w-4 h-4 animate-pulse" />
-              <span>Connect Phone</span>
+              <Smartphone className={`w-4 h-4 ${deviceStatus?.is_connected ? 'text-emerald-300' : 'animate-pulse'}`} />
+              <span>
+                {deviceStatus?.is_connected ? 'Android Phone Active' : 'Connect Phone'}
+              </span>
+              {deviceStatus?.is_connected && (
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+              )}
             </button>
 
             {/* Live Phone Pedometer Sync Button */}
@@ -785,6 +829,8 @@ export default function DashboardPage() {
         onDataUpdated={() => fetchData()}
         currentSteps={metrics?.steps?.current_value || 0}
         currentScreenTime={metrics?.screen_time?.current_value || 0}
+        deviceStatus={deviceStatus}
+        onStatusChange={refreshDeviceStatus}
       />
     </div>
   );

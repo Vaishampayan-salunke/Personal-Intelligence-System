@@ -121,4 +121,13 @@ export const privacyService = {
   updateConsent: (consent) => api.post(`/privacy/consent?consent=${consent}`),
 };
 
+export const mobileService = {
+  getPairingCode: () => api.post('/mobile/pair-code'),
+  getStatus: () => api.get('/mobile/status'),
+  getLatest: () => api.get('/mobile/latest'),
+  getHistory: (limit = 20) => api.get(`/mobile/history?limit=${limit}`),
+  disconnectDevice: (deviceId) => api.delete(`/mobile/disconnect?device_id=${encodeURIComponent(deviceId)}`),
+  getWsTicket: () => api.post('/mobile/ws-ticket'),
+};
+
 export default api;

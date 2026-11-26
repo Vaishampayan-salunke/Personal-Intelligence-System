@@ -4,6 +4,7 @@ from app.models.goal import Goal
 from app.models.insight import Insight
 from app.models.nudge import Nudge
 from app.models.chat import ChatHistory
+from app.models.mobile_device import MobileDevice, MobileMetricLog
 
 __all__ = [
     "User",
@@ -12,5 +13,7 @@ __all__ = [
     "Goal",
     "Insight",
     "Nudge",
-    "ChatHistory"
+    "ChatHistory",
+    "MobileDevice",
+    "MobileMetricLog"
 ]

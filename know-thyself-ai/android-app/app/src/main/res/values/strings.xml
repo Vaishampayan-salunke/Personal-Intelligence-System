@@ -1,0 +1,10 @@
+<resources>
+    <string name="app_name">Know Thyself AI</string>
+    <string name="subtitle">Android Lifestyle Companion</string>
+    <string name="pair_with_dashboard">Pair with Web Dashboard</string>
+    <string name="enter_pair_code">Enter 6-digit code shown on your computer screen</string>
+    <string name="sync_now">Sync Now</string>
+    <string name="connected">Connected &amp; Active</string>
+    <string name="disconnected">Disconnected</string>
+    <string name="live_telemetry">Live Phone Telemetry</string>
+</resources>

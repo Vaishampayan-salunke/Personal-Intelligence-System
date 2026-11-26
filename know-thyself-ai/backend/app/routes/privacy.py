@@ -9,6 +9,7 @@ from app.models.goal import Goal
 from app.models.insight import Insight
 from app.models.nudge import Nudge
 from app.models.chat import ChatHistory
+from app.models.mobile_device import MobileDevice, MobileMetricLog
 from app.routes.dependencies import get_current_user
 
 router = APIRouter(prefix="/api/privacy", tags=["Privacy and Data Ownership"])
@@ -24,6 +25,8 @@ def export_user_data(
     insights = db.query(Insight).filter(Insight.user_id == current_user.id).all()
     nudges = db.query(Nudge).filter(Nudge.user_id == current_user.id).all()
     chats = db.query(ChatHistory).filter(ChatHistory.user_id == current_user.id).all()
+    devices = db.query(MobileDevice).filter(MobileDevice.user_id == current_user.id).all()
+    mobile_logs = db.query(MobileMetricLog).filter(MobileMetricLog.user_id == current_user.id).order_by(MobileMetricLog.recorded_at.desc()).limit(200).all()
 
     export_payload = {
         "export_metadata": {
@@ -75,6 +78,28 @@ def export_user_data(
         "chat_history": [
             {"id": c.id, "question": c.question, "answer": c.answer, "created_at": c.created_at.isoformat() if c.created_at else None}
             for c in chats
+        ],
+        "mobile_devices": [
+            {
+                "id": d.id,
+                "device_id": d.device_id,
+                "device_name": d.device_name,
+                "model": d.model,
+                "is_connected": d.is_connected,
+                "last_sync_at": d.last_sync_at.isoformat() if d.last_sync_at else None
+            }
+            for d in devices
+        ],
+        "mobile_telemetry_logs": [
+            {
+                "id": ml.id,
+                "metric_type": ml.metric_type,
+                "metric_value": ml.metric_value,
+                "unit": ml.unit,
+                "source": ml.source,
+                "recorded_at": ml.recorded_at.isoformat() if ml.recorded_at else None
+            }
+            for ml in mobile_logs
         ]
     }
     return export_payload
@@ -91,17 +116,21 @@ def delete_all_user_lifestyle_data(
         nudges_deleted = db.query(Nudge).filter(Nudge.user_id == current_user.id).delete()
         chats_deleted = db.query(ChatHistory).filter(ChatHistory.user_id == current_user.id).delete()
         goals_deleted = db.query(Goal).filter(Goal.user_id == current_user.id).delete()
+        mobile_logs_deleted = db.query(MobileMetricLog).filter(MobileMetricLog.user_id == current_user.id).delete()
+        devices_deleted = db.query(MobileDevice).filter(MobileDevice.user_id == current_user.id).delete()
         
         db.commit()
         return {
             "success": True,
-            "message": "All personal records, insights, goals, and chat histories have been permanently deleted.",
+            "message": "All personal records, insights, goals, mobile telemetry, and chat histories have been permanently deleted.",
             "deleted_counts": {
                 "daily_records": records_deleted,
                 "insights": insights_deleted,
                 "nudges": nudges_deleted,
                 "chat_history": chats_deleted,
-                "goals": goals_deleted
+                "goals": goals_deleted,
+                "mobile_logs": mobile_logs_deleted,
+                "mobile_devices": devices_deleted
             }
         }
     except Exception as e:

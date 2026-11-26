@@ -169,7 +169,64 @@ npm run build
 
 ---
 
-## 7. Online Deployment Guide
+## 8. Android Companion App & Real-Time Sensor Sync
+
+Know Thyself AI features a native Kotlin Android companion app (`know-thyself-ai/android-app`) that synchronizes real-world health and usage data from your phone directly into the web dashboard in real time.
+
+```mermaid
+flowchart LR
+    subgraph Android Phone
+        SM[SensorManager Pedometer]
+        USM[UsageStatsManager Screen Time]
+        HC[Health Connect Sleep & Hydration]
+        ROOM[(Room SQLite Offline Queue)]
+        WM[WorkManager 15-min Sync]
+    end
+
+    subgraph Backend
+        FASTAPI[FastAPI Mobile Endpoints]
+        WS_POOL[WebSocket Connection Manager]
+        DB[(PostgreSQL / SQLite)]
+    end
+
+    subgraph Web Dashboard
+        REACT[React 18 Dashboard]
+        HOOK[useLiveMetrics Hook]
+    end
+
+    SM --> WM
+    USM --> WM
+    HC --> WM
+    WM -. Offline Cache .-> ROOM
+    WM -->|HTTPS POST /api/mobile/sync| FASTAPI
+    FASTAPI --> DB
+    FASTAPI -->|metrics_update| WS_POOL
+    WS_POOL -->|WebSocket /ws/metrics| HOOK
+    HOOK --> REACT
+```
+
+### Key Mobile Capabilities:
+1. **Zero-JWT Setup via 6-Digit Pairing Code:**
+   - From the web dashboard, click **Connect Phone** to generate a single-use 6-digit numeric code.
+   - Enter the code in the Android companion app. The backend verifies the code and issues an access token stored securely via `EncryptedSharedPreferences`.
+2. **Hardware Pedometer (`SensorManager`):**
+   - Reads `Sensor.TYPE_STEP_COUNTER` to count genuine physical steps taken today using midnight baseline calculation.
+3. **App Usage Tracking (`UsageStatsManager`):**
+   - Aggregates daily interactive foreground screen time with user approval via `Settings.ACTION_USAGE_ACCESS_SETTINGS`.
+4. **Health Connect (`HealthConnectClient`):**
+   - Automatically synchronizes sleep sessions (`SleepSessionRecord`), workouts (`ExerciseSessionRecord`), and water consumption (`HydrationRecord`).
+5. **Offline Queue & Resiliency (`Room` + `WorkManager`):**
+   - If network connectivity is lost, metric telemetry is queued locally in Room SQLite (`PendingSyncEntity`) and replayed upon reconnection.
+6. **Live Instant Updates via WebSockets (`/ws/metrics`):**
+   - Phone uploads immediately trigger live WebSocket broadcasts to the React web dashboard, updating scores, cards, and charts in real time without refreshing the page.
+
+### Setting Up the Android App in Android Studio:
+1. Open Android Studio and select **Open Project**.
+2. Select the `know-thyself-ai/android-app` folder.
+3. Allow Gradle to sync.
+4. Run the app on your physical Android phone (or Android emulator with API 34).
+5. Enter your server URL (or leave default) and the 6-digit pairing code shown in your dashboard!
+
 
 ### Deploying Frontend to Vercel
 1. Push your repository to GitHub.

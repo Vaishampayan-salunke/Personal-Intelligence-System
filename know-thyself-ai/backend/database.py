@@ -84,7 +84,7 @@ def get_db():
         db.close()
 
 def init_db():
-    from app.models import user, record, goal, insight, nudge, chat
+    from app.models import user, record, goal, insight, nudge, chat, mobile_device
     Base.metadata.create_all(bind=engine)
     # Clean up any orphaned user preferences from prior runs if any
     with engine.connect() as conn:

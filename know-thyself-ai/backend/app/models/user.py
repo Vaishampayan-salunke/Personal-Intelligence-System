@@ -18,6 +18,8 @@ class User(Base):
     insights = relationship("Insight", back_populates="user", cascade="all, delete-orphan")
     nudges = relationship("Nudge", back_populates="user", cascade="all, delete-orphan")
     chat_history = relationship("ChatHistory", back_populates="user", cascade="all, delete-orphan")
+    mobile_devices = relationship("MobileDevice", back_populates="user", cascade="all, delete-orphan")
+    mobile_logs = relationship("MobileMetricLog", back_populates="user", cascade="all, delete-orphan")
 
 class UserPreference(Base):
     __tablename__ = "user_preferences"
