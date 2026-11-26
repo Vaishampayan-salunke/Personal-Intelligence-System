@@ -9,6 +9,11 @@
     <!-- Step Tracking -->
     <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
 
+    <!-- Camera for QR Code Scanning -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
+
     <!-- Usage Stats (Screen Time) - requires user approval via Settings -->
     <uses-permission
         android:name="android.permission.PACKAGE_USAGE_STATS"

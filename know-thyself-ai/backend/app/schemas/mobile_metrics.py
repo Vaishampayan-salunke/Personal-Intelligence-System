@@ -71,3 +71,85 @@ class WebSocketTicketResponse(BaseModel):
     ticket: str
     expires_in_seconds: int
     ws_url: str
+
+
+# -------------------------------------------------------------
+# Secure QR Code + Phone Verification + Manual Pairing Schemas
+# -------------------------------------------------------------
+
+class PhoneVerificationRequest(BaseModel):
+    country_code: str = Field("+91", max_length=5)
+    phone_number: str = Field(..., min_length=7, max_length=15)
+
+class PhoneVerificationResponse(BaseModel):
+    status: str
+    phone_number: str
+    dev_mode: bool = False
+    message: str
+    dev_otp: Optional[str] = None
+
+class OTPVerificationRequest(BaseModel):
+    country_code: str = Field("+91", max_length=5)
+    phone_number: str = Field(..., min_length=7, max_length=15)
+    otp_code: str = Field(..., min_length=4, max_length=10)
+
+class OTPVerificationResponse(BaseModel):
+    status: str
+    verified: bool
+    phone_number: str
+    message: str
+
+class PairingCreateRequest(BaseModel):
+    phone_number: Optional[str] = None
+
+class PairingCreateResponse(BaseModel):
+    pairing_id: str
+    pairing_token: str
+    pairing_code: str
+    qr_payload: str
+    qr_svg: str
+    expires_in_seconds: int = 120
+    expires_at: datetime
+    server_url: str
+
+class PairingClaimRequest(BaseModel):
+    pairing_id: Optional[str] = None
+    pairing_token: Optional[str] = None
+    pairing_code: Optional[str] = None
+    device_id: str = Field(..., min_length=1, max_length=100)
+    device_name: Optional[str] = Field("Android Phone", max_length=100)
+    model: Optional[str] = None
+    os_version: Optional[str] = None
+    app_version: Optional[str] = "1.0.0"
+
+class PairingClaimResponse(BaseModel):
+    pairing_id: str
+    status: str
+    account_name: str
+    account_masked_email: str
+    requires_approval: bool = True
+    expires_in_seconds: int
+
+class PairingStatusResponse(BaseModel):
+    pairing_id: str
+    status: str # pending, claimed, approval_required, approved, expired, rejected
+    device_name: Optional[str] = None
+    expires_in_seconds: int
+    is_expired: bool
+
+class PairingApproveRequest(BaseModel):
+    pairing_id: str
+    device_id: str = Field(..., min_length=1, max_length=100)
+    device_name: Optional[str] = None
+    model: Optional[str] = None
+    os_version: Optional[str] = None
+    app_version: Optional[str] = "1.0.0"
+    approved: bool = True
+
+class PairingApproveResponse(BaseModel):
+    status: str
+    device_id: str
+    device_name: str
+    access_token: str
+    token_type: str = "bearer"
+    user_id: int

@@ -17,6 +17,16 @@ interface ApiService {
         @Body request: MobileConnectRequest
     ): Response<MobileDeviceResponse>
 
+    @POST("/api/mobile/pairing/claim")
+    suspend fun claimPairing(
+        @Body request: PairingClaimRequest
+    ): Response<PairingClaimResponse>
+
+    @POST("/api/mobile/pairing/approve")
+    suspend fun approvePairing(
+        @Body request: PairingApproveRequest
+    ): Response<PairingApproveResponse>
+
     @POST("/api/mobile/sync")
     suspend fun syncMetrics(
         @Body payload: MobileSyncPayload

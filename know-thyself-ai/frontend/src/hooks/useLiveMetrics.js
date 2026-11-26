@@ -10,6 +10,7 @@ export function useLiveMetrics(onMetricsUpdate) {
     today_synced_summary: null,
   });
   const [latestUpdate, setLatestUpdate] = useState(null);
+  const [pairingEvent, setPairingEvent] = useState(null);
 
   const wsRef = useRef(null);
   const pingIntervalRef = useRef(null);
@@ -92,6 +93,20 @@ export function useLiveMetrics(onMetricsUpdate) {
             if (onUpdateRef.current) {
               onUpdateRef.current(data);
             }
+          } else if ([
+            'pairing_started',
+            'device_scanned',
+            'device_approval_required',
+            'device_connected',
+            'pairing_expired',
+            'pairing_failed',
+            'device_disconnected'
+          ].includes(data.type)) {
+            console.log('[LiveMetrics] Pairing event:', data.type, data);
+            setPairingEvent(data);
+            if (data.type === 'device_connected' || data.type === 'device_disconnected') {
+              fetchDeviceStatus();
+            }
           }
         } catch (e) {
           console.error('[LiveMetrics] Message parse error:', e);
@@ -146,6 +161,7 @@ export function useLiveMetrics(onMetricsUpdate) {
     isWsConnected,
     deviceStatus,
     latestUpdate,
+    pairingEvent,
     refreshDeviceStatus: fetchDeviceStatus,
   };
 }

@@ -206,9 +206,12 @@ flowchart LR
 ```
 
 ### Key Mobile Capabilities:
-1. **Zero-JWT Setup via 6-Digit Pairing Code:**
-   - From the web dashboard, click **Connect Phone** to generate a single-use 6-digit numeric code.
-   - Enter the code in the Android companion app. The backend verifies the code and issues an access token stored securely via `EncryptedSharedPreferences`.
+1. **Secure QR Code & Manual Pairing with Phone Verification:**
+   - **Step 1 (Phone OTP):** Verify mobile phone via real SMS OTP (Twilio) or Development Sandbox Mode (when SMS gateway credentials are not configured).
+   - **Step 2 (Pairing):** Generate a 2-minute cryptographically secure pairing session via **Option A: Scan QR Code** or **Option B: 6-Digit Manual Code**.
+   - **No Permanent JWT in QR Codes:** QR codes only contain ephemeral, single-use, hashed pairing session identifiers.
+   - **Explicit On-Device Approval:** Android app scans the QR code or receives the 6-digit code, displays **"Do you want to connect this device to Know Thyself AI?"** with the user's masked account details, and requires an explicit tap on **"Approve & Connect"** before any device is registered.
+   - **Real-Time WebSocket Events:** The website listens for `device_scanned`, `device_approval_required`, `device_connected`, and `device_disconnected` to transition UI states in real time.
 2. **Hardware Pedometer (`SensorManager`):**
    - Reads `Sensor.TYPE_STEP_COUNTER` to count genuine physical steps taken today using midnight baseline calculation.
 3. **App Usage Tracking (`UsageStatsManager`):**
@@ -223,9 +226,31 @@ flowchart LR
 ### Setting Up the Android App in Android Studio:
 1. Open Android Studio and select **Open Project**.
 2. Select the `know-thyself-ai/android-app` folder.
-3. Allow Gradle to sync.
+3. Allow Gradle to sync (includes CameraX and Google ML Kit Barcode Scanning).
 4. Run the app on your physical Android phone (or Android emulator with API 34).
-5. Enter your server URL (or leave default) and the 6-digit pairing code shown in your dashboard!
+5. From the web dashboard (**Settings → Device Integration**), click **Connect Android Phone**.
+6. Verify your phone number, then either scan the displayed QR code with your phone camera or enter the 6-digit code!
+7. Tap **Approve & Connect** on your phone!
+
+---
+
+## 9. Environment Variables Reference
+
+### Backend (`know-thyself-ai/backend/.env` or Render Dashboard)
+| Variable | Required | Description |
+|---|---|---|
+| `DATABASE_URL` | Recommended | PostgreSQL connection URL (e.g., Supabase / Neon / Render Postgres). Default: SQLite. |
+| `JWT_SECRET` | Required | Secure random secret string used to sign JWT tokens. |
+| `GEMINI_API_KEY` | Optional | Google Gemini API key. If omitted, local deterministic rule engine answers AI queries seamlessly. |
+| `FRONTEND_ORIGIN` | Required in Prod | URL of your deployed frontend (e.g., `https://personal-intelligence-system-gamma.vercel.app`). |
+| `TWILIO_ACCOUNT_SID` | Optional | Twilio Account SID for sending real SMS OTPs. |
+| `TWILIO_AUTH_TOKEN` | Optional | Twilio Auth Token for SMS verification. |
+| `TWILIO_PHONE_NUMBER` | Optional | Twilio phone number sending the SMS. (If not set, system runs in Development Sandbox Mode). |
+
+### Frontend (`know-thyself-ai/frontend/.env` or Vercel Dashboard)
+| Variable | Required | Description |
+|---|---|---|
+| `VITE_API_BASE_URL` | Required in Prod | Backend API URL (e.g., `https://your-backend.onrender.com/api`). |
 
 
 ### Deploying Frontend to Vercel

@@ -128,6 +128,10 @@ export const mobileService = {
   getHistory: (limit = 20) => api.get(`/mobile/history?limit=${limit}`),
   disconnectDevice: (deviceId) => api.delete(`/mobile/disconnect?device_id=${encodeURIComponent(deviceId)}`),
   getWsTicket: () => api.post('/mobile/ws-ticket'),
+  verifyPhone: (countryCode, phoneNumber) => api.post('/mobile/verify-phone', { country_code: countryCode, phone_number: phoneNumber }),
+  verifyOtp: (countryCode, phoneNumber, otpCode) => api.post('/mobile/verify-otp', { country_code: countryCode, phone_number: phoneNumber, otp_code: otpCode }),
+  createPairing: (phoneNumber = null) => api.post('/mobile/pairing/create', { phone_number: phoneNumber }),
+  getPairingStatus: (pairingId) => api.get(`/mobile/pairing/status/${pairingId}`),
 };
 
 export default api;

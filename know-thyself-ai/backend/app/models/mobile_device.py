@@ -42,3 +42,41 @@ class MobileMetricLog(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     user = relationship("User", back_populates="mobile_logs")
+
+
+class MobilePairingSession(Base):
+    __tablename__ = "mobile_pairing_sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    pairing_id = Column(String(64), unique=True, index=True, nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    phone_number = Column(String(30), nullable=True)
+    token_hash = Column(String(64), nullable=False, index=True)
+    code_hash = Column(String(64), nullable=False, index=True)
+    status = Column(String(30), default="pending", nullable=False) # pending, approval_required, approved, expired, rejected
+    device_id = Column(String(100), nullable=True)
+    device_name = Column(String(100), nullable=True)
+    model = Column(String(100), nullable=True)
+    os_version = Column(String(50), nullable=True)
+    app_version = Column(String(50), nullable=True)
+    attempt_count = Column(Integer, default=0)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    approved_at = Column(DateTime(timezone=True), nullable=True)
+
+    user = relationship("User")
+
+
+class MobilePhoneVerification(Base):
+    __tablename__ = "mobile_phone_verifications"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    phone_number = Column(String(30), nullable=False, index=True)
+    otp_hash = Column(String(64), nullable=False)
+    is_verified = Column(Boolean, default=False)
+    attempts = Column(Integer, default=0)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    user = relationship("User")

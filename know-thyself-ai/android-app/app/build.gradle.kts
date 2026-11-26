@@ -72,6 +72,16 @@ dependencies {
     // Health Connect for Sleep, Exercise, and Hydration
     implementation("androidx.health.connect:connect-client:1.1.0-alpha07")
 
+    // CameraX for QR Code Scanning
+    val cameraxVersion = "1.3.3"
+    implementation("androidx.camera:camera-core:$cameraxVersion")
+    implementation("androidx.camera:camera-camera2:$cameraxVersion")
+    implementation("androidx.camera:camera-lifecycle:$cameraxVersion")
+    implementation("androidx.camera:camera-view:$cameraxVersion")
+
+    // Google ML Kit Barcode Scanning
+    implementation("com.google.mlkit:barcode-scanning:17.2.0")
+
     // Room Database for Offline Cache & Queuing
     val roomVersion = "2.6.1"
     implementation("androidx.room:room-runtime:$roomVersion")

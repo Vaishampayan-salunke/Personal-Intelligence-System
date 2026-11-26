@@ -10,16 +10,121 @@ from app.models.record import DailyRecord
 from app.schemas.mobile_metrics import (
     MobileConnectRequest, MobileDeviceResponse, MobileStatusResponse,
     MobileSyncPayload, MobileSyncResponse, PairingCodeResponse,
-    WebSocketTicketResponse
+    WebSocketTicketResponse, PhoneVerificationRequest, PhoneVerificationResponse,
+    OTPVerificationRequest, OTPVerificationResponse, PairingCreateRequest,
+    PairingCreateResponse, PairingClaimRequest, PairingClaimResponse,
+    PairingStatusResponse, PairingApproveRequest, PairingApproveResponse
 )
 from app.routes.dependencies import get_current_user, get_optional_current_user
 from app.core.security import create_access_token
 from app.services.mobile_sync import (
     create_pairing_code, verify_and_consume_pairing_code, process_mobile_sync
 )
+from app.services.pairing_service import (
+    send_phone_verification_otp, verify_phone_otp, create_pairing_session,
+    claim_pairing_session, approve_pairing_session, get_pairing_status
+)
 from app.services.websocket_manager import ws_manager
 
 router = APIRouter(prefix="/api/mobile", tags=["Mobile Integration"])
+
+# -------------------------------------------------------------
+# STEP 1: Phone Number & SMS Verification
+# -------------------------------------------------------------
+
+@router.post("/verify-phone", response_model=PhoneVerificationResponse)
+def verify_phone_number(
+    req: PhoneVerificationRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Initiate real phone verification by sending an SMS OTP.
+    Falls back to Development Sandbox Mode if SMS credentials are not configured.
+    """
+    return send_phone_verification_otp(current_user.id, req.country_code, req.phone_number, db)
+
+@router.post("/verify-otp", response_model=OTPVerificationResponse)
+def verify_otp_endpoint(
+    req: OTPVerificationRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Verify the phone OTP submitted by the user.
+    """
+    return verify_phone_otp(current_user.id, req.country_code, req.phone_number, req.otp_code, db)
+
+# -------------------------------------------------------------
+# STEP 2: Secure QR Code & Manual Device Pairing
+# -------------------------------------------------------------
+
+@router.post("/pairing/create", response_model=PairingCreateResponse)
+async def create_pairing(
+    req: PairingCreateRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Generate a 2-minute cryptographically secure pairing session:
+    - Unique pairing_id and single-use pairing token
+    - 6-digit manual pairing code
+    - Standalone SVG QR code containing server and session payload (no permanent JWT in QR)
+    """
+    server_base = str(request.base_url).rstrip("/")
+    return await create_pairing_session(current_user.id, req.phone_number, server_base, db)
+
+@router.post("/pairing/claim", response_model=PairingClaimResponse)
+async def claim_pairing(
+    claim_in: PairingClaimRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Android Companion App claims the pairing session via scanned QR token or 6-digit code.
+    Transitions session to approval_required and alerts website via WebSocket.
+    """
+    return await claim_pairing_session(
+        pairing_id=claim_in.pairing_id,
+        pairing_token=claim_in.pairing_token,
+        pairing_code=claim_in.pairing_code,
+        device_id=claim_in.device_id,
+        device_name=claim_in.device_name,
+        model=claim_in.model,
+        os_version=claim_in.os_version,
+        app_version=claim_in.app_version,
+        db=db
+    )
+
+@router.get("/pairing/status/{pairing_id}", response_model=PairingStatusResponse)
+def check_pairing_status(
+    pairing_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Check the current status and remaining validity of a pairing session.
+    """
+    return get_pairing_status(pairing_id, db)
+
+@router.post("/pairing/approve")
+async def approve_pairing(
+    approve_in: PairingApproveRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Explicit user approval from the Android Companion App.
+    Registers the device, issues device access token, and notifies the website.
+    """
+    return await approve_pairing_session(
+        pairing_id=approve_in.pairing_id,
+        device_id=approve_in.device_id,
+        device_name=approve_in.device_name,
+        model=approve_in.model,
+        os_version=approve_in.os_version,
+        app_version=approve_in.app_version,
+        approved=approve_in.approved,
+        db=db
+    )
 
 @router.post("/pair-code", response_model=PairingCodeResponse)
 def get_pairing_code(
@@ -203,13 +308,14 @@ def get_metric_history(
     return logs
 
 @router.delete("/disconnect")
-def disconnect_device(
+async def disconnect_device(
     device_id: Optional[str] = Query(None, description="Specific device_id to disconnect"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
     Disconnect / unpair an Android device.
+    Broadcasts device_disconnected WebSocket event to update the website instantly.
     """
     q = db.query(MobileDevice).filter(MobileDevice.user_id == current_user.id)
     if device_id:
@@ -226,6 +332,14 @@ def disconnect_device(
         d.is_connected = False
 
     db.commit()
+
+    # Broadcast disconnection to user's web session
+    await ws_manager.broadcast_to_user(current_user.id, {
+        "type": "device_disconnected",
+        "device_id": device_id or "all",
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    })
+
     return {
         "status": "success",
         "message": f"Successfully disconnected {len(devices)} device(s)."

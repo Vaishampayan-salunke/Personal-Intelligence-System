@@ -62,3 +62,42 @@ data class MobileStatusResponse(
     @SerializedName("last_sync_at") val lastSyncAt: String?,
     @SerializedName("today_synced_summary") val todaySyncedSummary: Map<String, Any>?
 )
+
+data class PairingClaimRequest(
+    @SerializedName("pairing_id") val pairingId: String? = null,
+    @SerializedName("pairing_token") val pairingToken: String? = null,
+    @SerializedName("pairing_code") val pairingCode: String? = null,
+    @SerializedName("device_id") val deviceId: String,
+    @SerializedName("device_name") val deviceName: String?,
+    @SerializedName("model") val model: String?,
+    @SerializedName("os_version") val osVersion: String?,
+    @SerializedName("app_version") val appVersion: String = "1.0.0"
+)
+
+data class PairingClaimResponse(
+    @SerializedName("pairing_id") val pairingId: String,
+    @SerializedName("status") val status: String,
+    @SerializedName("account_name") val accountName: String,
+    @SerializedName("account_masked_email") val accountMaskedEmail: String,
+    @SerializedName("requires_approval") val requiresApproval: Boolean,
+    @SerializedName("expires_in_seconds") val expiresInSeconds: Int
+)
+
+data class PairingApproveRequest(
+    @SerializedName("pairing_id") val pairingId: String,
+    @SerializedName("device_id") val deviceId: String,
+    @SerializedName("device_name") val deviceName: String?,
+    @SerializedName("model") val model: String?,
+    @SerializedName("os_version") val osVersion: String?,
+    @SerializedName("app_version") val appVersion: String = "1.0.0",
+    @SerializedName("approved") val approved: Boolean = true
+)
+
+data class PairingApproveResponse(
+    @SerializedName("status") val status: String,
+    @SerializedName("device_id") val deviceId: String,
+    @SerializedName("device_name") val deviceName: String,
+    @SerializedName("access_token") val accessToken: String,
+    @SerializedName("token_type") val tokenType: String,
+    @SerializedName("user_id") val userId: Int
+)

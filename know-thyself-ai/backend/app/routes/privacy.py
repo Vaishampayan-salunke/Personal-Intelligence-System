@@ -9,7 +9,7 @@ from app.models.goal import Goal
 from app.models.insight import Insight
 from app.models.nudge import Nudge
 from app.models.chat import ChatHistory
-from app.models.mobile_device import MobileDevice, MobileMetricLog
+from app.models.mobile_device import MobileDevice, MobileMetricLog, MobilePairingSession, MobilePhoneVerification
 from app.routes.dependencies import get_current_user
 
 router = APIRouter(prefix="/api/privacy", tags=["Privacy and Data Ownership"])
@@ -118,6 +118,8 @@ def delete_all_user_lifestyle_data(
         goals_deleted = db.query(Goal).filter(Goal.user_id == current_user.id).delete()
         mobile_logs_deleted = db.query(MobileMetricLog).filter(MobileMetricLog.user_id == current_user.id).delete()
         devices_deleted = db.query(MobileDevice).filter(MobileDevice.user_id == current_user.id).delete()
+        pairing_sessions_deleted = db.query(MobilePairingSession).filter(MobilePairingSession.user_id == current_user.id).delete()
+        phone_verifications_deleted = db.query(MobilePhoneVerification).filter(MobilePhoneVerification.user_id == current_user.id).delete()
         
         db.commit()
         return {
@@ -130,7 +132,9 @@ def delete_all_user_lifestyle_data(
                 "chat_history": chats_deleted,
                 "goals": goals_deleted,
                 "mobile_logs": mobile_logs_deleted,
-                "mobile_devices": devices_deleted
+                "mobile_devices": devices_deleted,
+                "pairing_sessions": pairing_sessions_deleted,
+                "phone_verifications": phone_verifications_deleted
             }
         }
     except Exception as e:
