@@ -1,6 +1,7 @@
 package com.knowthyself.ui
 
 import android.Manifest
+import android.net.Uri
 import android.content.pm.PackageManager
 import android.util.Log
 import android.view.ViewGroup
@@ -334,9 +335,25 @@ fun PairingScreen(
                             CameraQRScanner(
                                 onQRCodeDetected = { qrString ->
                                     try {
+                                        // 1. Support Actionable URL format (https://.../connect-device?pairing_id=...&token=...)
+                                        if (qrString.contains("pairing_id") && qrString.contains("http")) {
+                                            val uri = Uri.parse(qrString)
+                                            val pId = uri.getQueryParameter("pairing_id")
+                                            val pToken = uri.getQueryParameter("token") ?: uri.getQueryParameter("pairing_token")
+                                            val sUrl = uri.getQueryParameter("server_url")
+                                            if (!pId.isNullOrBlank() && !pToken.isNullOrBlank()) {
+                                                if (!sUrl.isNullOrBlank()) {
+                                                    serverUrl = sUrl
+                                                }
+                                                handleClaim(pairingId = pId, pairingToken = pToken)
+                                                return@CameraQRScanner
+                                            }
+                                        }
+
+                                        // 2. Support JSON payload format fallback
                                         val gson = Gson()
                                         val obj = gson.fromJson(qrString, JsonObject::class.java)
-                                        if (obj.has("pairing_id") && obj.has("pairing_token")) {
+                                        if (obj != null && obj.has("pairing_id") && obj.has("pairing_token")) {
                                             val pId = obj.get("pairing_id").asString
                                             val pToken = obj.get("pairing_token").asString
                                             if (obj.has("server_url")) {

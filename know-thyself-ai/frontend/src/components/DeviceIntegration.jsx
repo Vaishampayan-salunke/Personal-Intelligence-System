@@ -103,11 +103,11 @@ export default function DeviceIntegration() {
     return () => clearInterval(timer);
   }, [pairingData]);
 
-  // STEP 1: Send OTP
+  // STEP 1: Send OTP via SMS
   const handleSendOtp = async (e) => {
     e?.preventDefault();
     if (!phoneNumber || phoneNumber.trim().length < 8) {
-      error('Please enter a valid phone number.');
+      error('Please enter a valid mobile phone number.');
       return;
     }
     setSendingOtp(true);
@@ -115,18 +115,7 @@ export default function DeviceIntegration() {
     try {
       const res = await mobileService.verifyPhone(countryCode, phoneNumber);
       setOtpSent(true);
-      if (res.data.dev_mode) {
-        setDevModeNotice({
-          message: res.data.message,
-          code: res.data.dev_otp
-        });
-        if (res.data.dev_otp) {
-          setOtpCode(res.data.dev_otp);
-        }
-        info('Development Sandbox Mode: Pre-filled with test verification code.');
-      } else {
-        success(`SMS verification code sent to ${countryCode} ${phoneNumber}`);
-      }
+      success(`Verification code dispatched via SMS to ${countryCode} ${phoneNumber}. Please check your phone.`);
     } catch (err) {
       error(err.response?.data?.detail || 'Failed to send OTP.');
     } finally {
@@ -460,36 +449,14 @@ export default function DeviceIntegration() {
                   </div>
                 </form>
 
-                {/* DEVELOPMENT SANDBOX NOTICE (If SMS provider is unconfigured) */}
-                {devModeNotice && (
-                  <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-xs text-amber-900 space-y-2">
-                    <div className="flex items-center gap-1.5 font-bold text-amber-800">
-                      <AlertCircle className="w-4 h-4 text-amber-600" />
-                      <span>Development Sandbox Mode Active</span>
-                    </div>
-                    <p className="text-[11px] leading-relaxed text-amber-800/90">
-                      {devModeNotice.message}
-                    </p>
-                    {devModeNotice.code && (
-                      <div className="flex items-center justify-between p-2 rounded-xl bg-white border border-amber-200">
-                        <span className="font-mono font-bold text-amber-900 tracking-wider">
-                          OTP: {devModeNotice.code}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => setOtpCode(devModeNotice.code)}
-                          className="px-2 py-1 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-900 text-[10px] font-bold"
-                        >
-                          Auto-Fill OTP
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
-
                 {/* OTP SUBMISSION */}
                 {otpSent && (
                   <form onSubmit={handleVerifyOtp} className="pt-2 space-y-3">
+                    <div className="p-3 rounded-xl bg-indigo-50 border border-indigo-100 text-xs text-indigo-900 flex items-center gap-2">
+                      <ShieldCheck className="w-4 h-4 text-indigo-600 flex-shrink-0" />
+                      <span>SMS OTP sent to your phone. Please check your SMS inbox and enter the 6-digit code below:</span>
+                    </div>
+
                     <label className="text-[11px] font-bold text-slate-700 uppercase tracking-wider block">
                       Enter 6-Digit OTP Code
                     </label>

@@ -73,7 +73,8 @@ async def create_pairing(
     - Standalone SVG QR code containing server and session payload (no permanent JWT in QR)
     """
     server_base = str(request.base_url).rstrip("/")
-    return await create_pairing_session(current_user.id, req.phone_number, server_base, db)
+    client_origin = request.headers.get("origin") or request.headers.get("referer")
+    return await create_pairing_session(current_user.id, req.phone_number, server_base, db, client_origin=client_origin)
 
 @router.post("/pairing/claim", response_model=PairingClaimResponse)
 async def claim_pairing(

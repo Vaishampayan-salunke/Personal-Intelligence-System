@@ -132,6 +132,9 @@ export const mobileService = {
   verifyOtp: (countryCode, phoneNumber, otpCode) => api.post('/mobile/verify-otp', { country_code: countryCode, phone_number: phoneNumber, otp_code: otpCode }),
   createPairing: (phoneNumber = null) => api.post('/mobile/pairing/create', { phone_number: phoneNumber }),
   getPairingStatus: (pairingId) => api.get(`/mobile/pairing/status/${pairingId}`),
+  claimPairing: (data) => api.post('/mobile/pairing/claim', data),
+  approvePairing: (data) => api.post('/mobile/pairing/approve', data),
+  syncTelemetry: (data, token) => api.post('/mobile/sync', data, token ? { headers: { Authorization: `Bearer ${token}` } } : {}),
 };
 
 export default api;

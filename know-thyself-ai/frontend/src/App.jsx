@@ -16,6 +16,7 @@ import InsightsPage from './pages/InsightsPage';
 import AskAIPage from './pages/AskAIPage';
 import GoalsPage from './pages/GoalsPage';
 import SettingsPage from './pages/SettingsPage';
+import ConnectDevicePage from './pages/ConnectDevicePage';
 import NotFoundPage from './pages/NotFoundPage';
 
 export default function App() {
@@ -30,6 +31,7 @@ export default function App() {
               <Route path="/login" element={<LoginPage />} />
               <Route path="/register" element={<RegisterPage />} />
               <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+              <Route path="/connect-device" element={<ConnectDevicePage />} />
 
               {/* Authenticated Dashboard Experience */}
               <Route
