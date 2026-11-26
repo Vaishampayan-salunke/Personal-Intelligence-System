@@ -85,16 +85,16 @@ def sync_live_steps(
     ).first()
 
     if not record:
-        new_val = steps if steps is not None else (increment if increment is not None else 150)
+        new_val = steps if steps is not None else (increment if increment is not None else 0)
         record = DailyRecord(
             user_id=current_user.id,
             date=today_str,
             steps=max(0, new_val),
-            sleep_hours=7.0,
-            screen_time=2.5,
-            exercise_minutes=15,
-            water_intake=1.5,
-            mood="Good",
+            sleep_hours=0.0,
+            screen_time=0.0,
+            exercise_minutes=0,
+            water_intake=0.0,
+            mood="Neutral",
             energy=7,
             notes="Live phone step synchronization",
             is_synthetic=False
@@ -106,7 +106,51 @@ def sync_live_steps(
         elif increment is not None:
             record.steps = max(0, record.steps + increment)
         else:
-            record.steps += 150
+            record.steps += 100
+
+    db.commit()
+    db.refresh(record)
+    return record
+
+@router.post("/sync-phone", response_model=DailyRecordResponse)
+def sync_phone_telemetry(
+    steps: Optional[int] = None,
+    screen_time: Optional[float] = None,
+    active_seconds: Optional[int] = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Real-time phone sensor & telemetry sync endpoint (live steps + screen time)."""
+    today_str = date.today().strftime("%Y-%m-%d")
+    record = db.query(DailyRecord).filter(
+        DailyRecord.user_id == current_user.id,
+        DailyRecord.date == today_str
+    ).first()
+
+    screen_hrs_inc = (active_seconds / 3600.0) if active_seconds else 0.0
+
+    if not record:
+        record = DailyRecord(
+            user_id=current_user.id,
+            date=today_str,
+            steps=max(0, steps or 0),
+            sleep_hours=0.0,
+            screen_time=round(screen_time if screen_time is not None else screen_hrs_inc, 2),
+            exercise_minutes=0,
+            water_intake=0.0,
+            mood="Neutral",
+            energy=7,
+            notes="Real-time Android phone sync",
+            is_synthetic=False
+        )
+        db.add(record)
+    else:
+        if steps is not None:
+            record.steps = max(0, steps)
+        if screen_time is not None:
+            record.screen_time = max(0.0, screen_time)
+        elif screen_hrs_inc > 0:
+            record.screen_time = round(record.screen_time + screen_hrs_inc, 2)
 
     db.commit()
     db.refresh(record)

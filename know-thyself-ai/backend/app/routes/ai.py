@@ -22,14 +22,6 @@ def ask_your_data(
         DailyRecord.user_id == current_user.id
     ).order_by(DailyRecord.date.asc()).all()
 
-    # If new user has zero records yet, seed baseline records immediately
-    if not records:
-        from app.routes.auth import seed_user_initial_records
-        seed_user_initial_records(current_user.id, db)
-        records = db.query(DailyRecord).filter(
-            DailyRecord.user_id == current_user.id
-        ).order_by(DailyRecord.date.asc()).all()
-
     pref = current_user.preferences
 
     # Check AI consent preference

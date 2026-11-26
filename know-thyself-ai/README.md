@@ -122,8 +122,14 @@ pip install -r requirements.txt
 # Configure environment variables (optional: add your GEMINI_API_KEY)
 cp .env.example .env
 
+#environment
+py -m venv .venv
+.venv\Scripts\activate
+
 # Run FastAPI server
 uvicorn main:app --reload --port 8000
+or
+python -m uvicorn main:app --reload --port 8000
 ```
 Backend runs at `http://127.0.0.1:8000`  
 OpenAPI Documentation at `http://127.0.0.1:8000/docs`

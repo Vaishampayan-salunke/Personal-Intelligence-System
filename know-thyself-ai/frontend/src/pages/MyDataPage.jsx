@@ -13,9 +13,10 @@ import {
   FileText, 
   Sparkles,
   Info,
-  X
+  X,
+  RotateCcw
 } from 'lucide-react';
-import { recordsService } from '../services/api';
+import { recordsService, authService } from '../services/api';
 import { useToast } from '../context/ToastContext';
 
 export default function MyDataPage() {
@@ -67,11 +68,11 @@ export default function MyDataPage() {
     setEditingRecord(null);
     setForm({
       date: new Date().toISOString().split('T')[0],
-      steps: 8000,
-      sleep_hours: 7.5,
-      screen_time: 4.0,
-      exercise_minutes: 30,
-      water_intake: 2.5,
+      steps: 0,
+      sleep_hours: 0.0,
+      screen_time: 0.0,
+      exercise_minutes: 0,
+      water_intake: 0.0,
       mood: 'Good',
       energy: 7,
       notes: '',
@@ -136,6 +137,19 @@ export default function MyDataPage() {
     }
   };
 
+  const handleResetToZero = async () => {
+    if (!window.confirm("Reset your account to fresh 0 records? This will clear all data so you can record 100% genuine real-time data.")) {
+      return;
+    }
+    try {
+      await authService.resetFreshAccount();
+      success("Account reset to fresh 0! Ready for real-time tracking.");
+      fetchRecords();
+    } catch (err) {
+      error("Failed to reset account: " + (err.response?.data?.detail || err.message));
+    }
+  };
+
   const handleCsvUpload = async (e) => {
     e.preventDefault();
     if (!csvFile) {
@@ -182,6 +196,15 @@ export default function MyDataPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
+          <button
+            onClick={handleResetToZero}
+            className="px-3.5 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs"
+            title="Wipe simulated data and reset to completely fresh 0 records"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            <span>Reset to Fresh 0</span>
+          </button>
+
           <button
             onClick={handleLoadSample}
             disabled={loadingSample}

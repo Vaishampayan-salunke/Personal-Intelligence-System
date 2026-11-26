@@ -258,8 +258,8 @@ def answer_user_chat_with_ai(question: str, records: List[DailyRecord], preferen
     # If completely empty, provide an informative coach welcome with immediate action
     if not records:
         return {
-            "answer": "Hey there! I don't see any lifestyle records in your account yet. To give you real-time personalized answers about your daily steps, sleep, screen time, and habits, click **'Load 30-Day Demo'** on the My Data page, or log your first entry above!",
-            "context_summary": "0 records found.",
+            "answer": "👋 Hello! Your account is completely fresh with **0 records logged**.\n\nTo view real, genuine data:\n• 📱 **Connect Android Phone:** Open the website on your phone or click **'Connect Phone'** on your Dashboard to stream your live walking steps and active screen-time sensors!\n• 📝 **Manual Entry:** Add today's true numbers on the **My Data** page.\n\nOnce your phone streams steps or you log today's metrics, I'll analyze your real-time performance!",
+            "context_summary": "0 records found (Fresh Real-Time Account).",
             "source": "analytics-fallback"
         }
 

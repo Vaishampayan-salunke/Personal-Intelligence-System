@@ -76,3 +76,19 @@ class Token(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: UserResponse
+
+class ForgotPasswordRequest(BaseModel):
+    email: str = Field(..., pattern=EMAIL_REGEX)
+
+class ResetPasswordRequest(BaseModel):
+    email: str = Field(..., pattern=EMAIL_REGEX)
+    token: str = Field(..., min_length=4)
+    new_password: str = Field(..., min_length=6)
+    confirm_password: Optional[str] = None
+
+    @field_validator("confirm_password")
+    @classmethod
+    def passwords_match(cls, v, info):
+        if v is not None and "new_password" in info.data and v != info.data["new_password"]:
+            raise ValueError("Passwords do not match")
+        return v

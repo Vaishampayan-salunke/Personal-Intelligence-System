@@ -36,14 +36,6 @@ def get_dashboard(
 
     pref = current_user.preferences
 
-    # If user has no records, auto-seed initial baseline records
-    if not records:
-        from app.routes.auth import seed_user_initial_records
-        seed_user_initial_records(current_user.id, db)
-        records = db.query(DailyRecord).filter(
-            DailyRecord.user_id == current_user.id
-        ).order_by(DailyRecord.date.asc()).all()
-
     # Calculate rich analytics and Personal Intelligence Score
     analytics = calculate_analytics(records, pref)
 
@@ -156,58 +148,69 @@ def get_dashboard(
     # Generate Real-Time Health & Routine Alert Messages
     live_alerts: List[LiveAlert] = []
 
-    # 1. Daily Steps Incomplete Alert
-    if c_steps < step_target:
-        diff_steps = int(step_target - c_steps)
-        live_alerts.append(LiveAlert(
-            id="alert-step-incomplete",
-            type="step_incomplete",
-            severity="warning",
-            title="Daily Step Target Incomplete",
-            message=f"You have reached {int(c_steps):,} of {step_target:,} steps today ({diff_steps:,} steps remaining). A 15-minute brisk walk will easily complete your target!",
-            action_label="Take 15m Walk"
-        ))
+    # --- REAL-TIME LIFESTYLE ALERTS ---
+    if disp_rec:
+        # 1. Daily Steps Alert
+        if c_steps < step_target:
+            diff_steps = int(step_target - c_steps)
+            live_alerts.append(LiveAlert(
+                id="alert-step-incomplete",
+                type="step_incomplete",
+                severity="warning",
+                title="Daily Step Target Incomplete",
+                message=f"You have reached {int(c_steps):,} of {step_target:,} steps today ({diff_steps:,} steps remaining). Take a brisk walk or connect your phone to track steps live!",
+                action_label="Take 15m Walk"
+            ))
+        else:
+            live_alerts.append(LiveAlert(
+                id="alert-step-completed",
+                type="step_completed",
+                severity="info",
+                title="Daily Step Goal Crushed!",
+                message=f"Outstanding! You've logged {int(c_steps):,} steps today, beating your {step_target:,} target.",
+                action_label="Celebrate"
+            ))
+
+        # 2. Incomplete Sleep Cycle Alert (only if sleep was logged > 0)
+        if 0 < c_sleep < 7.0:
+            live_alerts.append(LiveAlert(
+                id="alert-sleep-incomplete",
+                type="sleep_incomplete",
+                severity="danger" if c_sleep < 6.0 else "warning",
+                title="Incomplete Sleep Cycle Warning",
+                message=f"Only {c_sleep}h of sleep logged (target: {sleep_target}h). Deep REM and recovery cycles were interrupted. Wind down earlier tonight by {pref.preferred_sleep_time if pref else '22:45'}.",
+                action_label="Evening Wind-Down"
+            ))
+
+        # 3. Screen Time Warning (Approaching limit or Exceeded)
+        if c_screen > screen_limit:
+            excess_sc = round(c_screen - screen_limit, 1)
+            live_alerts.append(LiveAlert(
+                id="alert-screen-exceeded",
+                type="screen_exceeded",
+                severity="danger",
+                title="Screen Time Budget Exceeded",
+                message=f"Daily device screen usage is at {c_screen}h (+{excess_sc}h over your {screen_limit}h healthy ceiling). Excessive evening blue light delays melatonin; take a digital detox break.",
+                action_label="Digital Detox"
+            ))
+        elif c_screen >= (screen_limit * 0.75) and c_screen > 0:
+            rem_sc = round(screen_limit - c_screen, 1)
+            live_alerts.append(LiveAlert(
+                id="alert-screen-warning",
+                type="screen_warning",
+                severity="warning",
+                title="Screen Time Approaching Limit",
+                message=f"You have used {c_screen}h of your {screen_limit}h daily limit ({int(c_screen/screen_limit*100)}%). Only {rem_sc}h remaining. Practice the 20-20-20 eye relief rule.",
+                action_label="Rest Eyes"
+            ))
     else:
         live_alerts.append(LiveAlert(
-            id="alert-step-completed",
-            type="step_completed",
+            id="alert-welcome-fresh",
+            type="fresh_start",
             severity="info",
-            title="Daily Step Goal Crushed!",
-            message=f"Outstanding! You've logged {int(c_steps):,} steps today, beating your {step_target:,} target.",
-            action_label="Celebrate"
-        ))
-
-    # 2. Incomplete Sleep Cycle Alert
-    if c_sleep < 7.0:
-        live_alerts.append(LiveAlert(
-            id="alert-sleep-incomplete",
-            type="sleep_incomplete",
-            severity="danger" if c_sleep < 6.0 else "warning",
-            title="Incomplete Sleep Cycle Warning",
-            message=f"Only {c_sleep}h of sleep logged last night (target: {sleep_target}h). Deep REM and recovery cycles were interrupted. Wind down 30 minutes earlier tonight by {pref.preferred_sleep_time if pref else '22:45'}.",
-            action_label="Evening Wind-Down"
-        ))
-
-    # 3. Screen Time Warning (Approaching limit or Exceeded)
-    if c_screen > screen_limit:
-        excess_sc = round(c_screen - screen_limit, 1)
-        live_alerts.append(LiveAlert(
-            id="alert-screen-exceeded",
-            type="screen_exceeded",
-            severity="danger",
-            title="Screen Time Budget Exceeded",
-            message=f"Daily device screen usage is at {c_screen}h (+{excess_sc}h over your {screen_limit}h healthy ceiling). Excessive evening blue light delays melatonin; take a digital detox break.",
-            action_label="Digital Detox"
-        ))
-    elif c_screen >= (screen_limit * 0.75):
-        rem_sc = round(screen_limit - c_screen, 1)
-        live_alerts.append(LiveAlert(
-            id="alert-screen-warning",
-            type="screen_warning",
-            severity="warning",
-            title="Screen Time Approaching Limit",
-            message=f"You have used {c_screen}h of your {screen_limit}h daily limit ({int(c_screen/screen_limit*100)}%). Only {rem_sc}h remaining. Practice the 20-20-20 eye relief rule.",
-            action_label="Rest Eyes"
+            title="Fresh Real-Time Account Ready",
+            message="Your account is completely fresh with 0 recorded data. Open this site on your Android phone or click 'Connect Phone' to stream live pedometer steps and screen time!",
+            action_label="Connect Phone"
         ))
 
     # Retrieve recent insights or generate fallback if none exists yet

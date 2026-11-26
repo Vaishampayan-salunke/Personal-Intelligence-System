@@ -33,14 +33,6 @@ def get_insights(
         ).order_by(DailyRecord.date.asc()).all()
         pref = current_user.preferences
 
-        # If user has no records, seed baseline first
-        if not records:
-            from app.routes.auth import seed_user_initial_records
-            seed_user_initial_records(current_user.id, db)
-            records = db.query(DailyRecord).filter(
-                DailyRecord.user_id == current_user.id
-            ).order_by(DailyRecord.date.asc()).all()
-
         analytics = calculate_analytics(records, pref)
         items = generate_fallback_insights(analytics, pref)
         for s in items:
@@ -73,14 +65,6 @@ def generate_insights(
     ).order_by(DailyRecord.date.asc()).all()
 
     pref = current_user.preferences
-
-    # If user has no records, seed initial baseline so insights have numbers to analyze
-    if not records:
-        from app.routes.auth import seed_user_initial_records
-        seed_user_initial_records(current_user.id, db)
-        records = db.query(DailyRecord).filter(
-            DailyRecord.user_id == current_user.id
-        ).order_by(DailyRecord.date.asc()).all()
 
     if pref and not pref.ai_consent:
         analytics = calculate_analytics(records, pref)

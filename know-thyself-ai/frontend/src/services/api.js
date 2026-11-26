@@ -43,6 +43,9 @@ export const authService = {
   logout: () => api.post('/auth/logout'),
   updatePreferences: (data) => api.put('/auth/preferences', data),
   completeOnboarding: (data) => api.post('/auth/onboarding', data),
+  forgotPassword: (email) => api.post('/auth/forgot-password', { email }),
+  resetPassword: (data) => api.post('/auth/reset-password', data),
+  resetFreshAccount: () => api.post('/auth/reset-fresh'),
 };
 
 export const dashboardService = {
@@ -58,6 +61,13 @@ export const recordsService = {
     if (steps !== null) params.append('steps', steps);
     else if (increment !== null) params.append('increment', increment);
     return api.post(`/records/sync-steps?${params.toString()}`);
+  },
+  syncPhoneTelemetry: (params = {}) => {
+    const qs = new URLSearchParams();
+    if (params.steps !== undefined && params.steps !== null) qs.append('steps', params.steps);
+    if (params.screen_time !== undefined && params.screen_time !== null) qs.append('screen_time', params.screen_time);
+    if (params.active_seconds !== undefined && params.active_seconds !== null) qs.append('active_seconds', params.active_seconds);
+    return api.post(`/records/sync-phone?${qs.toString()}`);
   },
   updateRecord: (id, data) => api.put(`/records/${id}`, data),
   deleteRecord: (id) => api.delete(`/records/${id}`),

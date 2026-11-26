@@ -8,12 +8,15 @@ from app.models.record import DailyRecord
 from app.models.insight import Insight
 from app.schemas.user import (
     UserRegister, UserLogin, Token, UserResponse,
-    UserPreferenceUpdate, UserPreferenceResponse
+    UserPreferenceUpdate, UserPreferenceResponse,
+    ForgotPasswordRequest, ResetPasswordRequest
 )
-from app.core.security import hash_password, verify_password, create_access_token
+from app.core.security import hash_password, verify_password, create_access_token, decode_access_token
 from app.routes.dependencies import get_current_user
 
 router = APIRouter(prefix="/api/auth", tags=["Authentication"])
+
+RESET_CODES = {}
 
 def seed_user_initial_records(user_id: int, db: Session):
     """Seed 14 days of realistic baseline data so new users immediately have rich data for all features."""
@@ -115,13 +118,9 @@ def register(user_in: UserRegister, db: Session = Depends(get_db)):
         pref.ai_consent = True
         pref.onboarding_completed = True
     db.commit()
-
-    # Automatically seed initial baseline data so the new user has instant live analytics
-    seed_user_initial_records(user.id, db)
-
     db.refresh(user)
 
-    # Generate token
+    # Generate token (Real accounts start fresh with 0 records for genuine tracking)
     token = create_access_token({"sub": str(user.id), "email": user.email})
     return Token(access_token=token, token_type="bearer", user=user)
 
@@ -135,13 +134,85 @@ def login(user_in: UserLogin, db: Session = Depends(get_db)):
             detail="Invalid email or password. Please check your credentials."
         )
 
-    # Ensure user has baseline records if empty
-    rec_count = db.query(DailyRecord).filter(DailyRecord.user_id == user.id).count()
-    if rec_count == 0:
-        seed_user_initial_records(user.id, db)
-
     token = create_access_token({"sub": str(user.id), "email": user.email})
     return Token(access_token=token, token_type="bearer", user=user)
+
+@router.post("/forgot-password")
+def forgot_password(req: ForgotPasswordRequest, db: Session = Depends(get_db)):
+    """Generate a password reset code for the user account."""
+    clean_email = req.email.lower().strip()
+    user = db.query(User).filter(User.email == clean_email).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No account associated with '{clean_email}' was found."
+        )
+    
+    # Generate 6-digit code and signed JWT reset token
+    code = f"{random.randint(100000, 999999)}"
+    token = create_access_token({"sub": str(user.id), "email": user.email, "purpose": "pwd_reset"})
+    expires = datetime.now() + timedelta(minutes=15)
+    
+    RESET_CODES[clean_email] = {
+        "code": code,
+        "token": token,
+        "expires": expires
+    }
+    
+    return {
+        "message": f"Password reset verification code generated! Enter code {code} to set your new password.",
+        "email": clean_email,
+        "reset_code": code,
+        "reset_token": token
+    }
+
+@router.post("/reset-password")
+def reset_password(req: ResetPasswordRequest, db: Session = Depends(get_db)):
+    """Verify reset code/token and update user password."""
+    clean_email = req.email.lower().strip()
+    user = db.query(User).filter(User.email == clean_email).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Account not found."
+        )
+
+    stored = RESET_CODES.get(clean_email)
+    valid = False
+    
+    if stored and (stored["code"] == req.token.strip() or stored["token"] == req.token.strip()):
+        if datetime.now() <= stored["expires"]:
+            valid = True
+
+    # Fallback to direct token decode
+    if not valid:
+        try:
+            payload = decode_access_token(req.token.strip())
+            if payload and payload.get("email") == clean_email:
+                valid = True
+        except Exception:
+            pass
+
+    if not valid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired reset code. Please request a new code."
+        )
+
+    # Hash and save new password
+    user.password_hash = hash_password(req.new_password)
+    db.commit()
+    RESET_CODES.pop(clean_email, None)
+
+    return {"message": "Your password has been successfully reset! You can now sign in with your new password."}
+
+@router.post("/reset-fresh")
+def reset_fresh_account(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Wipes all synthetic/demo records and resets user to completely fresh 0 data."""
+    db.query(DailyRecord).filter(DailyRecord.user_id == current_user.id).delete()
+    db.query(Insight).filter(Insight.user_id == current_user.id).delete()
+    db.commit()
+    return {"message": "Account reset to fresh 0. Ready for real-time mobile tracking!", "records_count": 0}
 
 @router.post("/demo-login", response_model=Token)
 def demo_login(db: Session = Depends(get_db)):

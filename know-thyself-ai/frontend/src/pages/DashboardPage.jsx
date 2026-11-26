@@ -40,6 +40,7 @@ import {
 import { dashboardService, nudgesService, recordsService } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import ConnectPhoneModal from '../components/ConnectPhoneModal';
 
 export default function DashboardPage() {
   const { user } = useAuth();
@@ -53,6 +54,18 @@ export default function DashboardPage() {
   const [loadingSample, setLoadingSample] = useState(false);
   const [syncingSteps, setSyncingSteps] = useState(false);
   const [pedometerActive, setPedometerActive] = useState(false);
+  const [connectModalOpen, setConnectModalOpen] = useState(false);
+
+  // Active device screen-time background sync
+  useEffect(() => {
+    const syncInterval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        recordsService.syncPhoneTelemetry({ active_seconds: 60 }).catch(() => {});
+      }
+    }, 60000);
+
+    return () => clearInterval(syncInterval);
+  }, []);
 
   const fetchData = async () => {
     try {
@@ -203,11 +216,21 @@ export default function DashboardPage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5">
+            {/* Connect Phone Button */}
+            <button
+              onClick={() => setConnectModalOpen(true)}
+              className="px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-500 to-indigo-600 hover:from-emerald-600 hover:to-indigo-700 text-white text-xs font-bold transition-all flex items-center gap-2 shadow-md shadow-teal-500/25"
+              title="Connect Android phone to sync real-time steps & screen time"
+            >
+              <Smartphone className="w-4 h-4 animate-pulse" />
+              <span>Connect Phone</span>
+            </button>
+
             {/* Live Phone Pedometer Sync Button */}
             <button
               onClick={() => handleLiveStepSync(250)}
               disabled={syncingSteps}
-              className="px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-teal-500 to-emerald-600 hover:from-teal-600 hover:to-emerald-700 text-white text-xs font-bold transition-all flex items-center gap-2 shadow-md shadow-emerald-500/20"
+              className="px-3.5 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/15 text-white text-xs font-bold transition-all flex items-center gap-2 shadow-xs"
               title="Simulates walking & increments phone steps in real-time"
             >
               <Footprints className={`w-4 h-4 ${syncingSteps ? 'animate-bounce' : ''}`} />
@@ -754,6 +777,15 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+
+      {/* Connect Android Phone Modal */}
+      <ConnectPhoneModal
+        isOpen={connectModalOpen}
+        onClose={() => setConnectModalOpen(false)}
+        onDataUpdated={() => fetchData()}
+        currentSteps={today_record?.steps || 0}
+        currentScreenTime={today_record?.screen_time || 0}
+      />
     </div>
   );
 }
