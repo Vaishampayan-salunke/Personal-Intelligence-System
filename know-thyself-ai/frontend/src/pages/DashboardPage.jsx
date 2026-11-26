@@ -783,8 +783,8 @@ export default function DashboardPage() {
         isOpen={connectModalOpen}
         onClose={() => setConnectModalOpen(false)}
         onDataUpdated={() => fetchData()}
-        currentSteps={today_record?.steps || 0}
-        currentScreenTime={today_record?.screen_time || 0}
+        currentSteps={metrics?.steps?.current_value || 0}
+        currentScreenTime={metrics?.screen_time?.current_value || 0}
       />
     </div>
   );

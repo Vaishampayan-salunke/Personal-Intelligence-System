@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { Menu, Bell, Sparkles, User, Shield, CheckCircle } from 'lucide-react';
+import { Menu, Bell, Sparkles, User, Shield, CheckCircle, LogOut } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
 export default function Navbar({ setMobileOpen }) {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [showNotifications, setShowNotifications] = useState(false);
 
@@ -103,6 +103,16 @@ export default function Navbar({ setMobileOpen }) {
             {user?.name ? user.name.split(' ')[0] : 'Account'}
           </span>
         </div>
+
+        {/* Quick Log Out Button */}
+        <button
+          onClick={logout}
+          className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors"
+          title="Log Out"
+          aria-label="Log Out"
+        >
+          <LogOut className="w-4 h-4" />
+        </button>
       </div>
     </header>
   );
