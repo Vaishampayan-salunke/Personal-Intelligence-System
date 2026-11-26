@@ -35,7 +35,11 @@ app.add_middleware(
 # Startup event to ensure database tables are created
 @app.on_event("startup")
 def on_startup():
-    init_db()
+    try:
+        init_db()
+        print("Database tables initialized successfully.")
+    except Exception as e:
+        print(f"Database initialization at startup encountered an issue: {e}")
 
 @app.get("/health", tags=["System"])
 def health_check():
