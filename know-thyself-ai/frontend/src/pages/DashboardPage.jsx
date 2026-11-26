@@ -86,7 +86,6 @@ export default function DashboardPage() {
         metrics: updatedMetrics
       };
     });
-    info(`Live sync received from Android companion phone!`);
   };
 
   const { isWsConnected, deviceStatus, refreshDeviceStatus } = useLiveMetrics(handleLiveMetricsUpdate);

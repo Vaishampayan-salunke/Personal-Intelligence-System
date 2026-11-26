@@ -1,16 +1,50 @@
 import axios from 'axios';
 
-// Ensure base URL properly routes to the backend's /api prefix
-let rawBase = (import.meta.env.VITE_API_BASE_URL || '').trim().replace(/\/+$/, '');
-if (rawBase && !rawBase.endsWith('/api')) {
-  rawBase = `${rawBase}/api`;
-}
-const API_BASE_URL = rawBase || '/api';
+// Get backend API URL dynamically from localStorage override, env var, or production default
+export function getApiBaseUrl() {
+  const custom = typeof window !== 'undefined' ? localStorage.getItem('know_thyself_api_base_url') : null;
+  if (custom && custom.trim()) {
+    let clean = custom.trim().replace(/\/+$/, '');
+    return clean.endsWith('/api') ? clean : `${clean}/api`;
+  }
 
-console.log('[Know Thyself AI] API Base URL configured as:', API_BASE_URL);
+  let envBase = (import.meta.env.VITE_API_BASE_URL || '').trim().replace(/\/+$/, '');
+  if (envBase) {
+    return envBase.endsWith('/api') ? envBase : `${envBase}/api`;
+  }
+
+  // If deployed on Vercel without environment variables, default to the Render backend service
+  if (typeof window !== 'undefined' && window.location.hostname.includes('vercel.app')) {
+    return 'https://personal-intelligence-system.onrender.com/api';
+  }
+
+  return '/api';
+}
+
+export function setCustomApiBaseUrl(url) {
+  if (typeof window === 'undefined') return;
+  if (!url || !url.trim()) {
+    localStorage.removeItem('know_thyself_api_base_url');
+  } else {
+    let clean = url.trim().replace(/\/+$/, '');
+    if (!clean.endsWith('/api') && clean.startsWith('http')) {
+      clean = `${clean}/api`;
+    }
+    localStorage.setItem('know_thyself_api_base_url', clean);
+  }
+}
+
+export function getWsBaseUrl() {
+  const apiBase = getApiBaseUrl();
+  if (apiBase.startsWith('http')) {
+    return apiBase.replace(/^http/, 'ws').replace(/\/api\/?$/, '');
+  }
+  const protocol = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  return `${protocol}//${typeof window !== 'undefined' ? window.location.host : 'localhost:8000'}`;
+}
 
 const api = axios.create({
-  baseURL: API_BASE_URL,
+  baseURL: getApiBaseUrl(),
   headers: {
     'Content-Type': 'application/json',
   },
@@ -18,6 +52,7 @@ const api = axios.create({
 
 api.interceptors.request.use(
   (config) => {
+    config.baseURL = getApiBaseUrl();
     const token = localStorage.getItem('know_thyself_token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
@@ -34,7 +69,7 @@ api.interceptors.response.use(
       if (!error.response.data || typeof error.response.data !== 'object') {
         error.response.data = {};
       }
-      error.response.data.detail = 'Backend URL is missing in Vercel. In Vercel Project Settings -> Environment Variables, add VITE_API_BASE_URL pointing to your Render backend URL, then Redeploy.';
+      error.response.data.detail = 'Backend URL is missing or not responding. Click "Configure Backend URL" below to set your Render API URL.';
     }
 
     if (error.response && error.response.status === 401) {
@@ -80,6 +115,9 @@ export const recordsService = {
     const qs = new URLSearchParams();
     if (params.steps !== undefined && params.steps !== null) qs.append('steps', params.steps);
     if (params.screen_time !== undefined && params.screen_time !== null) qs.append('screen_time', params.screen_time);
+    if (params.sleep_hours !== undefined && params.sleep_hours !== null) qs.append('sleep_hours', params.sleep_hours);
+    if (params.exercise_minutes !== undefined && params.exercise_minutes !== null) qs.append('exercise_minutes', params.exercise_minutes);
+    if (params.water_intake !== undefined && params.water_intake !== null) qs.append('water_intake', params.water_intake);
     if (params.active_seconds !== undefined && params.active_seconds !== null) qs.append('active_seconds', params.active_seconds);
     return api.post(`/records/sync-phone?${qs.toString()}`);
   },

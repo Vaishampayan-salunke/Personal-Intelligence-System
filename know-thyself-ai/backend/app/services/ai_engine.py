@@ -2,7 +2,7 @@ import os
 import json
 import logging
 from typing import List, Dict, Any, Optional
-from datetime import date
+from datetime import date, timedelta
 from app.core.config import settings
 from app.schemas.insight import InsightStructured
 from app.services.analytics import calculate_analytics
@@ -244,10 +244,20 @@ def answer_user_chat_with_ai(question: str, records: List[DailyRecord], preferen
     analytics = calculate_analytics(records, preferences)
     
     today_str = date.today().strftime("%Y-%m-%d")
-    today_rec = next((r for r in reversed(records) if r.date == today_str), None)
-    latest_rec = records[-1] if records else None
+    yesterday_date = (date.today() - timedelta(days=1)).strftime("%Y-%m-%d")
 
     sorted_recs = sorted(records, key=lambda r: r.date)
+    today_rec = next((r for r in reversed(records) if r.date == today_str), None)
+    yesterday_rec = next((r for r in records if r.date == yesterday_date), None)
+    latest_rec = sorted_recs[-1] if sorted_recs else None
+
+    # Fallback to previous day if yesterday not explicitly dated today-1
+    if not yesterday_rec and len(sorted_recs) >= 2:
+        if today_rec and sorted_recs[-1].date == today_str:
+            yesterday_rec = sorted_recs[-2]
+        elif not today_rec:
+            yesterday_rec = sorted_recs[-1]
+
     recent_7 = sorted_recs[-7:] if len(sorted_recs) >= 7 else sorted_recs
 
     step_target = preferences.step_target if preferences else 8000
@@ -255,179 +265,282 @@ def answer_user_chat_with_ai(question: str, records: List[DailyRecord], preferen
     screen_limit = preferences.screen_time_limit if preferences else 4.0
     water_target = preferences.water_target if preferences else 2.5
 
-    # If completely empty, provide an informative coach welcome with immediate action
+    # If completely empty, report that limitation clearly
     if not records:
         return {
-            "answer": "👋 Hello! Your account is completely fresh with **0 records logged**.\n\nTo view real, genuine data:\n• 📱 **Connect Android Phone:** Open the website on your phone or click **'Connect Phone'** on your Dashboard to stream your live walking steps and active screen-time sensors!\n• 📝 **Manual Entry:** Add today's true numbers on the **My Data** page.\n\nOnce your phone streams steps or you log today's metrics, I'll analyze your real-time performance!",
-            "context_summary": "0 records found (Fresh Real-Time Account).",
-            "source": "analytics-fallback"
+            "answer": (
+                "Hello! Your account currently has 0 lifestyle records logged.\n\n"
+                "To ground answers in your personal data:\n"
+                "• Connect Android Phone: Scan the pairing QR code to stream live steps and screen time.\n"
+                "• Manual Entry: Log your daily activity on the My Data page.\n\n"
+                "Once records are logged, I can provide exact calculations and personal behavioural insights."
+            ),
+            "context_summary": "0 records found. Awaiting initial lifestyle data.",
+            "source": "analytics-grounded"
         }
 
     q_lower = question.lower()
+    curr_avgs = analytics.get("recent_7_avgs") or analytics.get("averages", {})
 
-    # Rule-based humanized answers for common phone-style questions
-    def humanized_coach_answer(q: str) -> str:
-        curr_avgs = analytics.get("recent_7_avgs") or analytics.get("averages", {})
-
-        # Question: Today's steps (e.g. "how many steps i ahve completed tdy", "steps today", "today steps")
-        if ("today" in q_lower or "tdy" in q_lower or "completed" in q_lower) and ("step" in q_lower or "walk" in q_lower):
-            steps_today = today_rec.steps if today_rec else (latest_rec.steps if latest_rec else 0)
-            diff = step_target - steps_today
-            if steps_today >= step_target:
-                return (
-                    f"🎉 **Awesome job!** Today you have completed **{steps_today:,} steps**, smashing your goal of **{step_target:,} steps** by {abs(diff):,} steps! "
-                    f"Keep this movement momentum going!"
-                )
+    # Grounded humanized assistant logic:
+    # 1. YESTERDAY SPECIFIC INQUIRIES
+    if "yesterday" in q_lower or "yday" in q_lower or "prev day" in q_lower or "previous day" in q_lower:
+        if "screen" in q_lower or "phone" in q_lower or "digital" in q_lower:
+            if yesterday_rec:
+                return {
+                    "answer": (
+                        f"Yesterday ({yesterday_rec.date}), your logged screen time was {yesterday_rec.screen_time} hours "
+                        f"(Target limit: {screen_limit}h). "
+                        + ("This exceeded your digital boundary." if yesterday_rec.screen_time > screen_limit else "This stayed comfortably within your limit.")
+                    ),
+                    "context_summary": f"Verified record from {yesterday_rec.date}.",
+                    "source": "analytics-grounded"
+                }
             else:
-                pct = round((steps_today / step_target) * 100, 1)
-                return (
-                    f"Hey! Today you've completed **{steps_today:,} steps** so far ({pct}% of your {step_target:,} step goal). "
-                    f"You have **{diff:,} steps remaining** to hit your target. A brisk 15-minute evening walk will get you right across the finish line! 🚶‍♂️"
-                )
+                return {
+                    "answer": f"I checked your database, but there is no record logged for yesterday ({yesterday_date}). Today's active screen time is currently {today_rec.screen_time if today_rec else 0.0}h.",
+                    "context_summary": f"No entry found for {yesterday_date}.",
+                    "source": "analytics-grounded"
+                }
 
-        # Question: Weekly step average
         elif "step" in q_lower or "walk" in q_lower or "activity" in q_lower:
-            avg_s = int(curr_avgs.get("steps", 8000))
-            diff = avg_s - step_target
-            comp = f"exceeding your {step_target:,} target by {abs(diff):,} steps" if diff >= 0 else f"trailing your {step_target:,} target by {abs(diff):,} steps"
-            max_s = max(recent_7, key=lambda r: r.steps)
-            min_s = min(recent_7, key=lambda r: r.steps)
-            return (
-                f"Over the last 7 days, you averaged **{avg_s:,} steps per day** ({comp}).\n\n"
-                f"• **Peak movement day:** {max_s.date} with **{max_s.steps:,} steps** 🔥\n"
-                f"• **Lowest movement day:** {min_s.date} with **{min_s.steps:,} steps**\n\n"
-                f"Today you're at **{today_rec.steps if today_rec else latest_rec.steps:,} steps**. Keep up the steady cadence!"
-            )
+            if yesterday_rec:
+                diff = yesterday_rec.steps - step_target
+                status = f"exceeding your {step_target:,} target" if diff >= 0 else f"{abs(diff):,} steps below your {step_target:,} goal"
+                return {
+                    "answer": f"Yesterday ({yesterday_rec.date}), you completed {yesterday_rec.steps:,} steps ({status}).",
+                    "context_summary": f"Verified record from {yesterday_rec.date}.",
+                    "source": "analytics-grounded"
+                }
+            else:
+                return {
+                    "answer": f"No step record was logged for yesterday ({yesterday_date}). Today you have completed {today_rec.steps if today_rec else 0:,} steps so far.",
+                    "context_summary": f"No entry found for {yesterday_date}.",
+                    "source": "analytics-grounded"
+                }
 
-        # Question: Sleep change & cycle
-        elif "sleep" in q_lower or "rest" in q_lower or "bed" in q_lower or "cycle" in q_lower:
-            avg_sl = curr_avgs.get("sleep_hours", 7.2)
-            today_sleep = today_rec.sleep_hours if today_rec else (latest_rec.sleep_hours if latest_rec else 7.0)
-            std_sl = analytics.get("sleep_std_hours", 0.5)
-            chg = analytics.get("changes_pct", {}).get("sleep_hours", 0.0)
-            trend_text = f"+{chg}% compared to the prior week" if chg >= 0 else f"{chg}% compared to the prior week"
-            status_text = "healthy and restorative" if today_sleep >= 7.0 else "shortened (incomplete restorative cycles)"
-            return (
-                f"Last night you logged **{today_sleep} hours of sleep**, which is {status_text} (Target: {sleep_target}h).\n\n"
-                f"• **7-Day Average:** {avg_sl}h per night ({trend_text})\n"
-                f"• **Rhythm Stability:** ±{std_sl}h day-to-day variance\n\n"
-                f"💡 **Coach Advice:** Aim to wind down by **{preferences.preferred_sleep_time if preferences else '23:00'}** tonight with dimmed lights to protect your deep REM recovery cycles."
-            )
+        elif "sleep" in q_lower or "rest" in q_lower or "bed" in q_lower:
+            if yesterday_rec:
+                return {
+                    "answer": f"Yesterday ({yesterday_rec.date}), you logged {yesterday_rec.sleep_hours} hours of sleep (Goal: {sleep_target}h).",
+                    "context_summary": f"Verified record from {yesterday_rec.date}.",
+                    "source": "analytics-grounded"
+                }
+            else:
+                return {
+                    "answer": f"No sleep record is available for yesterday ({yesterday_date}). Last logged sleep was {today_rec.sleep_hours if today_rec else 0.0}h.",
+                    "context_summary": f"No entry found for {yesterday_date}.",
+                    "source": "analytics-grounded"
+                }
 
-        # Question: Screen time
-        elif "screen" in q_lower or "phone" in q_lower or "digital" in q_lower:
-            today_sc = today_rec.screen_time if today_rec else (latest_rec.screen_time if latest_rec else 3.8)
-            avg_sc = curr_avgs.get("screen_time", 4.0)
-            diff = round(today_sc - screen_limit, 1)
-            status_text = f"🚨 Exceeding your healthy limit by +{diff}h" if diff > 0 else f"✅ Comfortable ({round(screen_limit - today_sc, 1)}h buffer remaining)"
-            return (
-                f"📱 **Digital Usage Check:**\n\n"
-                f"• **Today's Screen Time:** {today_sc}h (Target limit: {screen_limit}h) — {status_text}\n"
-                f"• **7-Day Average:** {avg_sc} hours/day\n\n"
-                f"Remember to rest your eyes using the 20-20-20 rule during prolonged device blocks!"
-            )
+        elif "water" in q_lower or "hydration" in q_lower or "drink" in q_lower:
+            if yesterday_rec:
+                return {
+                    "answer": f"Yesterday ({yesterday_rec.date}), your water intake was {yesterday_rec.water_intake}L (Target: {water_target}L).",
+                    "context_summary": f"Verified record from {yesterday_rec.date}.",
+                    "source": "analytics-grounded"
+                }
+            else:
+                return {
+                    "answer": f"No hydration record found for yesterday ({yesterday_date}). Today you have logged {today_rec.water_intake if today_rec else 0.0}L.",
+                    "context_summary": f"No entry found for {yesterday_date}.",
+                    "source": "analytics-grounded"
+                }
 
-        # Question: Least active days
-        elif "least active" in q_lower or "worst" in q_lower or "lowest" in q_lower:
-            min_s = min(recent_7, key=lambda r: r.steps)
-            return (
-                f"Your least active day recently was **{min_s.date}** with **{min_s.steps:,} steps** and {min_s.exercise_minutes} minutes of exercise. "
-                f"Screen time was {min_s.screen_time}h and sleep duration was {min_s.sleep_hours}h."
-            )
-
-        # Question: Improvements / What to do next week
-        elif "improve" in q_lower or "recommend" in q_lower or "next week" in q_lower:
-            return (
-                f"Based on your actual {len(records)} days of lifestyle data, here are 3 high-impact recommendations:\n\n"
-                f"1. **Evening Digital Curfew:** Reduce screen time 30 minutes before bed to allow natural melatonin onset.\n"
-                f"2. **Midday Movement Break:** Add two 10-minute walking sessions to comfortably reach your {step_target:,} daily steps.\n"
-                f"3. **Morning Hydration:** Drink a large glass of water upon waking to match your {water_target}L target."
-            )
-
-        # Summary inquiry
-        elif "summary" in q_lower or "week" in q_lower or "how am i" in q_lower:
-            score = analytics.get("score", {}).get("overall_score", 85)
-            level = analytics.get("score", {}).get("level", "Thriving")
-            return (
-                f"### 📋 Your 7-Day Lifestyle Summary:\n\n"
-                f"• **Daily Movement:** {int(curr_avgs.get('steps', 0)):,} steps/day ({analytics.get('changes_pct', {}).get('steps', 0):+}%)\n"
-                f"• **Sleep Rest:** {curr_avgs.get('sleep_hours', 0)}h/night (Target: {sleep_target}h)\n"
-                f"• **Screen Time:** {curr_avgs.get('screen_time', 0)}h/day (Limit: {screen_limit}h)\n"
-                f"• **Exercise:** {int(curr_avgs.get('exercise_minutes', 0))} min/day across {analytics.get('workout_days_7', 0)} active workout days\n"
-                f"• **Personal Intelligence Score:** **{score}/100** ({level})"
-            )
-
-        # Default fallback
         else:
-            return (
-                f"Here is your current lifestyle snapshot based on your {len(records)} logged days:\n\n"
-                f"• **Today's Steps:** {today_rec.steps if today_rec else latest_rec.steps:,} / {step_target:,} target\n"
-                f"• **Last Night's Sleep:** {today_rec.sleep_hours if today_rec else latest_rec.sleep_hours}h / {sleep_target}h target\n"
-                f"• **Current Screen Time:** {today_rec.screen_time if today_rec else latest_rec.screen_time}h / {screen_limit}h limit\n\n"
-                f"Feel free to ask me questions like *'How many steps did I average this week?'*, *'How has my sleep changed?'*, or *'How many steps have I completed today?'*!"
+            # Full yesterday overview
+            if yesterday_rec:
+                return {
+                    "answer": (
+                        f"Yesterday ({yesterday_rec.date}) Summary:\n"
+                        f"• Steps: {yesterday_rec.steps:,} / {step_target:,} goal\n"
+                        f"• Sleep: {yesterday_rec.sleep_hours}h / {sleep_target}h target\n"
+                        f"• Screen Time: {yesterday_rec.screen_time}h (Limit: {screen_limit}h)\n"
+                        f"• Exercise: {yesterday_rec.exercise_minutes} mins\n"
+                        f"• Water: {yesterday_rec.water_intake}L / {water_target}L target"
+                    ),
+                    "context_summary": f"Full log from {yesterday_rec.date}.",
+                    "source": "analytics-grounded"
+                }
+            else:
+                return {
+                    "answer": f"There is no log entry recorded for yesterday ({yesterday_date}). To view insights, please log past entries on the My Data page.",
+                    "context_summary": f"No record for {yesterday_date}.",
+                    "source": "analytics-grounded"
+                }
+
+    # 2. WATER / HYDRATION / REMAINDER INQUIRIES
+    if "water" in q_lower or "hydration" in q_lower or "drink" in q_lower or "fluid" in q_lower or "remainder" in q_lower:
+        today_w = today_rec.water_intake if today_rec else (latest_rec.water_intake if latest_rec else 0.0)
+        rem = round(max(0.0, water_target - today_w), 2)
+        if today_w >= water_target:
+            msg = (
+                f"Hydration Update: You have logged {today_w}L of water today, successfully meeting your {water_target}L goal!\n\n"
+                f"Maintaining consistent fluid intake throughout the day supports sustained cognitive clarity and digestion."
             )
-
-    context_summary = f"Grounded in {len(records)} days of verified personal data."
-
-    if not settings.GEMINI_API_KEY:
+        else:
+            msg = (
+                f"Hydration Reminder:\n"
+                f"• Today's Water Logged: {today_w}L\n"
+                f"• Daily Target: {water_target}L\n"
+                f"• Remaining: {rem}L needed today\n\n"
+                f"Tip: Drink a glass of water now to stay on pace for optimal daily hydration!"
+            )
         return {
-            "answer": humanized_coach_answer(question),
-            "context_summary": context_summary,
-            "source": "analytics-fallback"
+            "answer": msg,
+            "context_summary": f"Today's hydration: {today_w}L / {water_target}L target.",
+            "source": "analytics-grounded"
         }
 
-    try:
-        from google import genai
-        client = genai.Client(api_key=settings.GEMINI_API_KEY)
-        
-        context_data = {
-            "today_date": today_str,
-            "today_entry": {
-                "steps": today_rec.steps if today_rec else (latest_rec.steps if latest_rec else 0),
-                "sleep_hours": today_rec.sleep_hours if today_rec else (latest_rec.sleep_hours if latest_rec else 0),
-                "screen_time": today_rec.screen_time if today_rec else (latest_rec.screen_time if latest_rec else 0),
-                "exercise_minutes": today_rec.exercise_minutes if today_rec else 0,
-                "water_intake": today_rec.water_intake if today_rec else 0,
-                "energy": today_rec.energy if today_rec else 7,
-            },
-            "recent_7_averages": analytics.get("recent_7_avgs"),
-            "weekly_percentage_changes": analytics.get("changes_pct"),
-            "user_targets": {
-                "step_target": step_target,
-                "sleep_target": sleep_target,
-                "screen_limit": screen_limit,
-                "water_target": water_target,
-            },
-            "personal_intelligence_score": analytics.get("score", {}).get("overall_score")
-        }
-
-        prompt = f"""You are the user's personal Android health companion. Answer the following question in a warm, encouraging, humanized tone.
-Use the EXACT verified numbers from their metrics below.
-If they ask about today's steps or sleep, cite today's numbers directly and celebrate or motivate them!
-
-USER INQUIRY: "{question}"
-
-VERIFIED USER LIFESTYLE METRICS:
-{json.dumps(context_data, indent=2)}
-"""
-
-        response = client.models.generate_content(
-            model=settings.GEMINI_MODEL,
-            contents=prompt,
-            config={
-                "system_instruction": SYSTEM_INSTRUCTION,
-                "temperature": 0.4
+    # 3. TODAY'S STEPS & MOVEMENT
+    if ("today" in q_lower or "tdy" in q_lower or "completed" in q_lower or "now" in q_lower) and ("step" in q_lower or "walk" in q_lower):
+        steps_today = today_rec.steps if today_rec else (latest_rec.steps if latest_rec else 0)
+        diff = step_target - steps_today
+        if steps_today >= step_target:
+            return {
+                "answer": f"Awesome job! Today you have completed {steps_today:,} steps, exceeding your goal of {step_target:,} steps by {abs(diff):,} steps!",
+                "context_summary": f"Today's verified steps: {steps_today:,}.",
+                "source": "analytics-grounded"
             }
-        )
+        else:
+            pct = round((steps_today / step_target) * 100, 1) if step_target > 0 else 0
+            return {
+                "answer": (
+                    f"Today you have completed {steps_today:,} steps ({pct}% of your {step_target:,} goal).\n"
+                    f"You have {diff:,} steps remaining to reach your target. A brisk 15-minute walk will add about 1,500 steps!"
+                ),
+                "context_summary": f"Today's verified steps: {steps_today:,} ({diff:,} remaining).",
+                "source": "analytics-grounded"
+            }
+
+    # 4. WEEKLY STEPS & ACTIVITY TREND
+    if "step" in q_lower or "walk" in q_lower or "activity" in q_lower:
+        avg_s = int(curr_avgs.get("steps", 8000))
+        diff = avg_s - step_target
+        comp = f"exceeding your {step_target:,} target by {abs(diff):,} steps" if diff >= 0 else f"{abs(diff):,} steps below your {step_target:,} goal"
+        max_s = max(recent_7, key=lambda r: r.steps)
+        min_s = min(recent_7, key=lambda r: r.steps)
         return {
-            "answer": response.text.strip(),
-            "context_summary": context_summary,
-            "source": "gemini"
+            "answer": (
+                f"Over your recent records, you averaged {avg_s:,} steps per day ({comp}).\n\n"
+                f"• Peak Activity: {max_s.date} with {max_s.steps:,} steps\n"
+                f"• Lowest Activity: {min_s.date} with {min_s.steps:,} steps\n"
+                f"• Today's Progress: {today_rec.steps if today_rec else (latest_rec.steps if latest_rec else 0):,} steps"
+            ),
+            "context_summary": f"Calculated across {len(recent_7)} verified days.",
+            "source": "analytics-grounded"
         }
-    except Exception as e:
-        logger.warning(f"Gemini API chat error: {e}. Using humanized analytics response.")
+
+    # 5. SLEEP & CIRCADIAN RHYTHM
+    if "sleep" in q_lower or "rest" in q_lower or "bed" in q_lower or "wake" in q_lower or "night" in q_lower:
+        avg_sl = curr_avgs.get("sleep_hours", 7.2)
+        today_sleep = today_rec.sleep_hours if today_rec else (latest_rec.sleep_hours if latest_rec else 7.0)
+        std_sl = analytics.get("sleep_std_hours", 0.5)
+        chg = analytics.get("changes_pct", {}).get("sleep_hours", 0.0)
+        status = "healthy and restorative" if today_sleep >= 7.0 else "shortened (incomplete restorative cycles)"
         return {
-            "answer": humanized_coach_answer(question),
-            "context_summary": context_summary,
-            "source": "analytics-fallback"
+            "answer": (
+                f"Last night you logged {today_sleep} hours of sleep, which is {status} (Target: {sleep_target}h).\n\n"
+                f"• 7-Day Average: {avg_sl}h per night ({chg:+}% change)\n"
+                f"• Rhythm Stability: ±{std_sl}h day-to-day variance\n\n"
+                f"Recommendation: Keep your bedtime consistent around {preferences.preferred_sleep_time if preferences else '23:00'} to optimize deep sleep recovery."
+            ),
+            "context_summary": f"Calculated sleep metrics across {len(recent_7)} nights.",
+            "source": "analytics-grounded"
         }
+
+    # 6. SCREEN TIME & DIGITAL BOUNDARIES
+    if "screen" in q_lower or "phone" in q_lower or "digital" in q_lower or "usage" in q_lower:
+        today_sc = today_rec.screen_time if today_rec else (latest_rec.screen_time if latest_rec else 3.8)
+        avg_sc = curr_avgs.get("screen_time", 4.0)
+        diff = round(today_sc - screen_limit, 1)
+        status_text = f"Exceeding your target limit by {diff}h" if diff > 0 else f"Within target limit ({round(screen_limit - today_sc, 1)}h buffer remaining)"
+        return {
+            "answer": (
+                f"Digital Boundaries Check:\n"
+                f"• Today's Screen Time: {today_sc}h (Target limit: {screen_limit}h) — {status_text}\n"
+                f"• 7-Day Average: {avg_sc} hours/day\n\n"
+                f"Recommendation: Rest your eyes using the 20-20-20 rule during focused screen blocks."
+            ),
+            "context_summary": f"Today: {today_sc}h vs {screen_limit}h limit.",
+            "source": "analytics-grounded"
+        }
+
+    # 7. EXERCISE & FITNESS
+    if "exercise" in q_lower or "workout" in q_lower or "gym" in q_lower or "training" in q_lower:
+        today_ex = today_rec.exercise_minutes if today_rec else 0
+        avg_ex = int(curr_avgs.get("exercise_minutes", 20))
+        w_days = analytics.get("workout_days_7", 0)
+        return {
+            "answer": (
+                f"Fitness & Exercise Overview:\n"
+                f"• Today's Workout: {today_ex} active minutes\n"
+                f"• Recent Workout Days: {w_days} active days this week\n"
+                f"• Daily Average: {avg_ex} minutes/day\n\n"
+                f"Consistent moderate activity accelerates recovery and regulates resting metabolic rate."
+            ),
+            "context_summary": f"Exercise data across {len(recent_7)} days.",
+            "source": "analytics-grounded"
+        }
+
+    # 8. LEAST ACTIVE DAYS / OUTLIERS
+    if "least active" in q_lower or "worst" in q_lower or "lowest" in q_lower or "laziest" in q_lower:
+        min_s = min(recent_7, key=lambda r: r.steps)
+        return {
+            "answer": (
+                f"Your lowest activity day was {min_s.date} with {min_s.steps:,} steps and {min_s.exercise_minutes} mins of exercise. "
+                f"Screen time was {min_s.screen_time}h and sleep duration was {min_s.sleep_hours}h."
+            ),
+            "context_summary": f"Identified outlier record on {min_s.date}.",
+            "source": "analytics-grounded"
+        }
+
+    # 9. IMPROVEMENT & RECOMMENDATIONS
+    if "improve" in q_lower or "recommend" in q_lower or "next week" in q_lower or "better" in q_lower:
+        return {
+            "answer": (
+                f"Based on your {len(records)} days of lifestyle data, here are 3 targeted recommendations:\n\n"
+                f"1. Movement Cadence: Add two 10-minute brisk walking breaks to easily reach your {step_target:,} daily steps.\n"
+                f"2. Evening Digital Curfew: Dim screen brightness 30 minutes before bed to protect restorative melatonin release.\n"
+                f"3. Hydration Pacing: Keep a water bottle near your desk to consistently meet your {water_target}L target."
+            ),
+            "context_summary": f"Personalized recommendations grounded in {len(records)} records.",
+            "source": "analytics-grounded"
+        }
+
+    # 10. OVERVIEW & SUMMARY
+    if "summary" in q_lower or "overview" in q_lower or "how am i" in q_lower or "performance" in q_lower:
+        score = analytics.get("score", {}).get("overall_score", 75)
+        level = analytics.get("score", {}).get("level", "Developing")
+        return {
+            "answer": (
+                f"Lifestyle Snapshot & Overview:\n\n"
+                f"• Personal Intelligence Score: {score}/100 ({level})\n"
+                f"• Steps Average: {int(curr_avgs.get('steps', 0)):,} steps/day (Target: {step_target:,})\n"
+                f"• Sleep Rest: {curr_avgs.get('sleep_hours', 0)}h/night (Target: {sleep_target}h)\n"
+                f"• Screen Time: {curr_avgs.get('screen_time', 0)}h/day (Limit: {screen_limit}h)\n"
+                f"• Hydration: {curr_avgs.get('water_intake', 0)}L/day (Target: {water_target}L)\n"
+                f"• Active Days: {analytics.get('workout_days_7', 0)} workout days this week"
+            ),
+            "context_summary": f"Calculated from {len(records)} verified records.",
+            "source": "analytics-grounded"
+        }
+
+    # DEFAULT GROUNDED OVERVIEW
+    today_steps = today_rec.steps if today_rec else (latest_rec.steps if latest_rec else 0)
+    today_sleep = today_rec.sleep_hours if today_rec else (latest_rec.sleep_hours if latest_rec else 0.0)
+    today_screen = today_rec.screen_time if today_rec else (latest_rec.screen_time if latest_rec else 0.0)
+    today_water = today_rec.water_intake if today_rec else (latest_rec.water_intake if latest_rec else 0.0)
+
+    return {
+        "answer": (
+            f"Here is your current lifestyle status from your verified records:\n\n"
+            f"• Steps: {today_steps:,} / {step_target:,} target\n"
+            f"• Last Night's Sleep: {today_sleep}h / {sleep_target}h target\n"
+            f"• Screen Time: {today_screen}h / {screen_limit}h limit\n"
+            f"• Water Intake: {today_water}L / {water_target}L target\n\n"
+            f"You can ask me questions like 'What was yesterday's screen time?', 'How many steps have I completed today?', 'Water remainder?', or 'What is my sleep trend?'."
+        ),
+        "context_summary": f"Grounded in {len(records)} days of verified personal data.",
+        "source": "analytics-grounded"
+    }

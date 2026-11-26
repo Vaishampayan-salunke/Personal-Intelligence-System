@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { BrainCircuit, Mail, Lock, ArrowRight, Sparkles, AlertCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import BackendServerConfig from '../components/BackendServerConfig';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -154,6 +155,8 @@ export default function LoginPage() {
             </p>
           </div>
         </div>
+
+        <BackendServerConfig />
       </div>
     </div>
   );

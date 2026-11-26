@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { mobileService } from '../services/api';
+import { mobileService, getWsBaseUrl } from '../services/api';
 
 export function useLiveMetrics(onMetricsUpdate) {
   const [isWsConnected, setIsWsConnected] = useState(false);
@@ -41,15 +41,7 @@ export function useLiveMetrics(onMetricsUpdate) {
       const ticket = ticketRes.data.ticket;
 
       // 2. Determine WebSocket host URL
-      let wsBase = '';
-      const rawApiBase = import.meta.env.VITE_API_BASE_URL;
-
-      if (rawApiBase && rawApiBase.startsWith('http')) {
-        wsBase = rawApiBase.replace(/^http/, 'ws').replace(/\/api\/?$/, '');
-      } else {
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        wsBase = `${protocol}//${window.location.host}`;
-      }
+      const wsBase = getWsBaseUrl();
 
       const wsUrl = `${wsBase}/ws/metrics?ticket=${encodeURIComponent(ticket)}`;
       console.log('[LiveMetrics] Connecting to WebSocket:', wsUrl);

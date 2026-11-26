@@ -21,9 +21,62 @@ const SUGGESTED_PROMPTS = [
   "How has my sleep changed over the last 7 days?",
   "Which days were least active?",
   "What is my screen-time trend?",
+  "What was yesterday's screen time?",
+  "Water remainder?",
   "What should I improve next week?",
   "Give me a summary of my last seven days."
 ];
+
+function renderMessageContent(text, isUser) {
+  if (isUser) {
+    return <span className="whitespace-pre-wrap">{text}</span>;
+  }
+  if (!text) return null;
+
+  const lines = text.split('\n');
+
+  return (
+    <div className="space-y-1.5">
+      {lines.map((line, idx) => {
+        const trimmed = line.trim();
+        if (!trimmed) {
+          return <div key={idx} className="h-1.5" />;
+        }
+
+        const isBullet = trimmed.startsWith('•') || trimmed.startsWith('- ') || trimmed.startsWith('* ');
+        const cleanLine = isBullet ? trimmed.replace(/^[•\-\*]\s*/, '') : trimmed;
+
+        const parts = cleanLine.split(/(\*\*[^*]+?\*\*)/g);
+
+        const renderedLine = parts.map((part, pIdx) => {
+          if (part.startsWith('**') && part.endsWith('**') && part.length > 4) {
+            return (
+              <strong key={pIdx} className="font-bold text-slate-900">
+                {part.slice(2, -2).replace(/\*/g, '')}
+              </strong>
+            );
+          }
+          return <span key={pIdx}>{part.replace(/\*/g, '')}</span>;
+        });
+
+        if (isBullet) {
+          return (
+            <div key={idx} className="flex items-start gap-2 pl-1">
+              <span className="text-indigo-600 font-bold mt-0.5">•</span>
+              <div className="flex-1 leading-relaxed">{renderedLine}</div>
+            </div>
+          );
+        }
+
+        return (
+          <div key={idx} className="leading-relaxed">
+            {renderedLine}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 export default function AskAIPage() {
   const { user } = useAuth();
@@ -187,10 +240,10 @@ export default function AskAIPage() {
                 className={`max-w-[85%] sm:max-w-xl rounded-2xl p-4 text-xs leading-relaxed ${
                   isUser
                     ? 'bg-indigo-600 text-white rounded-tr-xs shadow-md shadow-indigo-600/15'
-                    : 'bg-slate-50/90 border border-slate-200/80 text-slate-800 rounded-tl-xs whitespace-pre-wrap'
+                    : 'bg-slate-50/90 border border-slate-200/80 text-slate-800 rounded-tl-xs'
                 }`}
               >
-                {m.text}
+                {renderMessageContent(m.text, isUser)}
 
                 {/* Grounding pill on AI message */}
                 {!isUser && m.context && (

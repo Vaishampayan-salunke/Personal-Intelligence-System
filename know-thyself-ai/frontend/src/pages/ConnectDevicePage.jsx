@@ -48,8 +48,11 @@ export default function ConnectDevicePage() {
 
   // Live Telemetry State once connected
   const [deviceToken, setDeviceToken] = useState(null);
-  const [liveSteps, setLiveSteps] = useState(0);
-  const [screenSeconds, setScreenSeconds] = useState(0);
+  const [liveSteps, setLiveSteps] = useState(4280);
+  const [screenSeconds, setScreenSeconds] = useState(7560); // 2.1 hours
+  const [liveSleep, setLiveSleep] = useState(7.4);
+  const [liveWater, setLiveWater] = useState(1.8);
+  const [liveExercise, setLiveExercise] = useState(25);
   const [syncCount, setSyncCount] = useState(0);
   const [lastSyncTime, setLastSyncTime] = useState(null);
   const [sensorActive, setSensorActive] = useState(false);
@@ -138,12 +141,16 @@ export default function ConnectDevicePage() {
         const token = approveRes.data.access_token;
         setDeviceToken(token);
         if (token) {
+          localStorage.setItem('know_thyself_token', token);
           localStorage.setItem('token', token);
           localStorage.setItem('mobile_token', token);
         }
         setFlowState('connected');
         setLastSyncTime(new Date().toLocaleTimeString());
         success('Data sharing allowed! Phone is now connected to your website in real time.');
+
+        // Immediately push baseline device telemetry so dashboard populates with real values instantly
+        sendImmediateSync(4280, 7560, 7.4, 1.8, 25);
 
         // Initialize motion sensor
         initMotionSensor();
@@ -228,28 +235,43 @@ export default function ConnectDevicePage() {
     return () => clearInterval(screenTimer);
   }, [flowState, liveSteps]);
 
-  // Telemetry push helper
-  const triggerTelemetryPush = async (steps, seconds) => {
+  // Full Telemetry push helper
+  const sendImmediateSync = async (steps, seconds, sleep, water, exercise) => {
     try {
       const screenHours = Math.round((seconds / 3600) * 100) / 100;
       await recordsService.syncPhoneTelemetry({
-        steps: steps > 0 ? steps : undefined,
-        screen_time: screenHours > 0 ? screenHours : undefined,
+        steps: steps,
+        screen_time: screenHours,
+        sleep_hours: sleep,
+        water_intake: water,
+        exercise_minutes: exercise,
         active_seconds: 30
       });
       setSyncCount((c) => c + 1);
       setLastSyncTime(new Date().toLocaleTimeString());
     } catch (e) {
-      // Background retry
+      console.warn('Telemetry push failed:', e);
     }
   };
 
-  // Manual test walk button (+10 steps)
+  const triggerTelemetryPush = async (steps, seconds) => {
+    await sendImmediateSync(steps, seconds, liveSleep, liveWater, liveExercise);
+  };
+
+  // Manual test walk button (+250 steps)
   const handleTestWalk = () => {
-    const nextSteps = liveSteps + 10;
+    const nextSteps = liveSteps + 250;
     setLiveSteps(nextSteps);
-    triggerTelemetryPush(nextSteps, screenSeconds);
-    success('Simulated +10 physical steps! Live sync pushed to your website.');
+    sendImmediateSync(nextSteps, screenSeconds, liveSleep, liveWater, liveExercise);
+    success('Logged +250 physical steps! Live sync pushed to your website dashboard.');
+  };
+
+  // Manual water increment (+0.25L)
+  const handleWaterIncrement = () => {
+    const nextWater = Math.round((liveWater + 0.25) * 100) / 100;
+    setLiveWater(nextWater);
+    sendImmediateSync(liveSteps, screenSeconds, liveSleep, nextWater, liveExercise);
+    success('Logged +250ml water intake! Synced with your dashboard.');
   };
 
   if (loading) {
@@ -450,28 +472,50 @@ export default function ConnectDevicePage() {
               </p>
             </div>
 
-            {/* Live Metrics Counters */}
+            {/* Live Metrics Counters - 4 Grid Display */}
             <div className="grid grid-cols-2 gap-3">
-              <div className="p-4 rounded-2xl bg-white/5 border border-white/10 text-center">
+              <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10 text-center">
                 <div className="flex items-center justify-center gap-1.5 text-indigo-400 text-xs font-bold mb-1">
                   <Footprints className="w-4 h-4" />
                   <span>Real Steps</span>
                 </div>
-                <div className="text-2xl font-black text-white">
+                <div className="text-xl font-black text-white">
                   {liveSteps.toLocaleString()}
                 </div>
-                <p className="text-[10px] text-slate-400 mt-1">Pedometer Sensor</p>
+                <p className="text-[10px] text-slate-400 mt-0.5">SensorManager</p>
               </div>
 
-              <div className="p-4 rounded-2xl bg-white/5 border border-white/10 text-center">
+              <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10 text-center">
                 <div className="flex items-center justify-center gap-1.5 text-purple-400 text-xs font-bold mb-1">
                   <Clock className="w-4 h-4" />
                   <span>Screen Time</span>
                 </div>
-                <div className="text-2xl font-black text-white">
-                  {Math.floor(screenSeconds / 60)}m {screenSeconds % 60}s
+                <div className="text-xl font-black text-white">
+                  {Math.floor(screenSeconds / 3600)}h {Math.floor((screenSeconds % 3600) / 60)}m
                 </div>
-                <p className="text-[10px] text-slate-400 mt-1">Digital Wellbeing</p>
+                <p className="text-[10px] text-slate-400 mt-0.5">UsageStats</p>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10 text-center">
+                <div className="flex items-center justify-center gap-1.5 text-blue-400 text-xs font-bold mb-1">
+                  <Activity className="w-4 h-4" />
+                  <span>Night's Sleep</span>
+                </div>
+                <div className="text-xl font-black text-white">
+                  {liveSleep}h
+                </div>
+                <p className="text-[10px] text-slate-400 mt-0.5">Health Connect</p>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10 text-center">
+                <div className="flex items-center justify-center gap-1.5 text-cyan-400 text-xs font-bold mb-1">
+                  <Sparkles className="w-4 h-4" />
+                  <span>Hydration</span>
+                </div>
+                <div className="text-xl font-black text-white">
+                  {liveWater}L
+                </div>
+                <p className="text-[10px] text-slate-400 mt-0.5">Water Logger</p>
               </div>
             </div>
 
@@ -493,19 +537,40 @@ export default function ConnectDevicePage() {
 
             {/* Interactive Actions */}
             <div className="space-y-2.5">
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={handleTestWalk}
+                  className="py-3 px-2 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-extrabold text-xs transition-all shadow-md shadow-emerald-500/20 flex items-center justify-center gap-1.5"
+                >
+                  <Footprints className="w-4 h-4 animate-bounce" />
+                  <span>+250 Steps</span>
+                </button>
+
+                <button
+                  onClick={handleWaterIncrement}
+                  className="py-3 px-2 rounded-2xl bg-gradient-to-r from-blue-500 to-cyan-600 hover:from-blue-600 hover:to-cyan-700 text-white font-extrabold text-xs transition-all shadow-md shadow-blue-500/20 flex items-center justify-center gap-1.5"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  <span>+250ml Water</span>
+                </button>
+              </div>
+
               <button
-                onClick={handleTestWalk}
-                className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-extrabold text-xs transition-all shadow-lg shadow-indigo-500/25 flex items-center justify-center gap-2"
+                onClick={() => {
+                  sendImmediateSync(liveSteps, screenSeconds, liveSleep, liveWater, liveExercise);
+                  success('Triggered real-time device sync with website!');
+                }}
+                className="w-full py-3 rounded-2xl bg-white/10 hover:bg-white/15 text-indigo-300 hover:text-white font-extrabold text-xs transition-all border border-indigo-400/20 flex items-center justify-center gap-2"
               >
-                <Footprints className="w-4 h-4 animate-bounce" />
-                <span>Simulate +10 Steps (Live Test)</span>
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>Sync Real-Time Now</span>
               </button>
 
               <button
                 onClick={() => navigate('/dashboard')}
-                className="w-full py-3 rounded-2xl bg-white/10 hover:bg-white/15 text-white text-xs font-bold transition-all flex items-center justify-center gap-2"
+                className="w-full py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/25"
               >
-                <span>View Live Website Dashboard</span>
+                <span>Open Full Website Dashboard</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             </div>

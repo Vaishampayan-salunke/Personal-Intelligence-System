@@ -1,17 +1,19 @@
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from sqlalchemy.orm import Session
 from typing import List, Optional, Dict, Any
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 import csv
 import io
 import random
 from database import get_db
-from app.models.user import User
+from app.models.user import User, UserPreference
 from app.models.record import DailyRecord
 from app.schemas.record import (
     DailyRecordCreate, DailyRecordUpdate, DailyRecordResponse, CSVImportResult
 )
 from app.routes.dependencies import get_current_user
+from app.services.websocket_manager import ws_manager
+from app.services.analytics import calculate_analytics
 
 router = APIRouter(prefix="/api/records", tags=["Daily Records"])
 
@@ -113,14 +115,17 @@ def sync_live_steps(
     return record
 
 @router.post("/sync-phone", response_model=DailyRecordResponse)
-def sync_phone_telemetry(
+async def sync_phone_telemetry(
     steps: Optional[int] = None,
     screen_time: Optional[float] = None,
+    sleep_hours: Optional[float] = None,
+    exercise_minutes: Optional[int] = None,
+    water_intake: Optional[float] = None,
     active_seconds: Optional[int] = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Real-time phone sensor & telemetry sync endpoint (live steps + screen time)."""
+    """Real-time phone sensor & telemetry sync endpoint (live steps, screen time, sleep, water)."""
     today_str = date.today().strftime("%Y-%m-%d")
     record = db.query(DailyRecord).filter(
         DailyRecord.user_id == current_user.id,
@@ -134,11 +139,11 @@ def sync_phone_telemetry(
             user_id=current_user.id,
             date=today_str,
             steps=max(0, steps or 0),
-            sleep_hours=0.0,
+            sleep_hours=round(max(0.0, sleep_hours or 0.0), 1),
             screen_time=round(screen_time if screen_time is not None else screen_hrs_inc, 2),
-            exercise_minutes=0,
-            water_intake=0.0,
-            mood="Neutral",
+            exercise_minutes=max(0, exercise_minutes or 0),
+            water_intake=round(max(0.0, water_intake or 0.0), 2),
+            mood="Good",
             energy=7,
             notes="Real-time Android phone sync",
             is_synthetic=False
@@ -151,9 +156,39 @@ def sync_phone_telemetry(
             record.screen_time = max(0.0, screen_time)
         elif screen_hrs_inc > 0:
             record.screen_time = round(record.screen_time + screen_hrs_inc, 2)
+        if sleep_hours is not None:
+            record.sleep_hours = max(0.0, sleep_hours)
+        if exercise_minutes is not None:
+            record.exercise_minutes = max(0, exercise_minutes)
+        if water_intake is not None:
+            record.water_intake = max(0.0, water_intake)
 
     db.commit()
     db.refresh(record)
+
+    # Recalculate intelligence score & broadcast real-time metrics update to dashboard
+    try:
+        user_records = db.query(DailyRecord).filter(DailyRecord.user_id == current_user.id).all()
+        pref = db.query(UserPreference).filter(UserPreference.user_id == current_user.id).first()
+        analytics = calculate_analytics(user_records, pref)
+        overall_score = analytics.get("score", {}).get("overall_score", 50)
+        await ws_manager.broadcast_to_user(current_user.id, {
+            "type": "metrics_update",
+            "synced_at": datetime.now(timezone.utc).isoformat(),
+            "device_id": "android_phone",
+            "current_metrics": {
+                "steps": record.steps,
+                "screen_time": record.screen_time,
+                "sleep_hours": record.sleep_hours,
+                "exercise_minutes": record.exercise_minutes,
+                "water_intake": record.water_intake,
+                "energy": record.energy
+            },
+            "intelligence_score": overall_score
+        })
+    except Exception:
+        pass
+
     return record
 
 @router.put("/{record_id}", response_model=DailyRecordResponse)
